@@ -23,6 +23,27 @@ An advanced command history manager that helps you track and search your shell c
    cargo install --path .
    ```
 
+## Project Structure
+
+```
+src/
+├── cli/           # Command-line interface code
+│   ├── args.rs    # Command line arguments
+│   ├── commands.rs # Command implementations
+│   └── mod.rs
+├── db/            # Database-related code
+│   ├── models.rs  # Database models
+│   ├── store.rs   # Database operations
+│   └── mod.rs
+├── shell/         # Shell integration
+│   ├── hooks.rs   # Shell hook implementations
+│   └── mod.rs
+├── utils/         # Utility functions
+│   ├── time.rs    # Time-related utilities
+│   └── mod.rs
+└── main.rs        # Application entry point
+```
+
 ## Shell Integration
 
 ### Zsh
@@ -41,13 +62,16 @@ source /path/to/lazy-history/shell/bash-integration.sh
 
 ## Usage
 
-### Adding Commands Manually
+### Adding Commands
 ```bash
 # Add a simple command
 lazy-history add "your command here"
 
 # Add a command with tags
 lazy-history add "git push origin main" -t important -t git
+
+# Add a command with exit code
+lazy-history add "make build" --exit-code 1
 ```
 
 ### Searching Commands
@@ -74,9 +98,25 @@ lazy-history tag list
 lazy-history tag search git
 ```
 
-## Database Location
+## Development
 
-The command history is stored in `~/.lazy-history/history.db`
+### Prerequisites
+
+- Rust 1.70 or later
+- SQLite 3.x
+
+### Building
+
+```bash
+# Development build
+cargo build
+
+# Release build
+cargo build --release
+
+# Run tests
+cargo test
+```
 
 ## License
 
