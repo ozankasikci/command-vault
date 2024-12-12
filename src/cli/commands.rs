@@ -22,6 +22,10 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             let commands = db.search_commands(&query, limit)?;
             print_commands(&commands);
         }
+        Commands::Ls { limit, asc } => {
+            let commands = db.list_commands(limit, asc)?;
+            print_commands(&commands);
+        }
         Commands::Tag { action } => match action {
             TagCommands::Add { command_id, tags } => {
                 db.add_tags_to_command(command_id, &tags)?;

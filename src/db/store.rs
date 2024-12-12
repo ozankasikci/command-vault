@@ -262,4 +262,47 @@ impl Database {
         
         Ok(tags)
     }
+
+    pub fn list_commands(&self, limit: usize, ascending: bool) -> Result<Vec<Command>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code 
+             FROM commands c
+             ORDER BY c.timestamp DESC
+             LIMIT ?1"
+        )?;
+
+        if ascending {
+            stmt = self.conn.prepare(
+                "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code 
+                 FROM commands c
+                 ORDER BY c.timestamp ASC
+                 LIMIT ?1"
+            )?;
+        }
+
+        let command_iter = stmt.query_map([limit], |row| {
+            let id = row.get(0)?;
+            Ok(Command {
+                id: Some(id),
+                command: row.get(1)?,
+                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    ))?
+                    .with_timezone(&Utc),
+                directory: row.get(3)?,
+                exit_code: row.get(4)?,
+                tags: self.get_command_tags(id).unwrap_or_default(),
+            })
+        })?;
+
+        let mut commands = Vec::new();
+        for command in command_iter {
+            commands.push(command?);
+        }
+        
+        Ok(commands)
+    }
 }

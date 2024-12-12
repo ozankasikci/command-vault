@@ -34,6 +34,16 @@ pub enum Commands {
         #[arg(short, long, default_value = "10")]
         limit: usize,
     },
+    /// List all commands in chronological order
+    Ls {
+        /// Maximum number of results to show
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+        
+        /// Sort in ascending order (oldest first)
+        #[arg(short = 'a', long)]
+        asc: bool,
+    },
     /// Tag related operations
     Tag {
         #[command(subcommand)]
