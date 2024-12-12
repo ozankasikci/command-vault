@@ -2,9 +2,10 @@
 name = "command-vault"
 version = "0.1.0"
 edition = "2021"
-authors = [""]
-description = "An advanced command history manager"
+authors = ["Ozan Kaşikci"]
 license = "MIT"
+description = "An advanced command history manager with tagging and search capabilities"
+repository = "https://github.com/ozan/command-vault"
 
 [dependencies]
 anyhow = "1.0"
