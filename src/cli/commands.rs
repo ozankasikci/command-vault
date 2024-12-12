@@ -24,7 +24,35 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
         }
         Commands::Ls { limit, asc } => {
             let commands = db.list_commands(limit, asc)?;
-            print_commands(&commands);
+            if commands.is_empty() {
+                println!("No commands found.");
+                return Ok(());
+            }
+
+            println!("\nCommand History:");
+            println!("─────────────────────────────────────────────");
+            
+            for cmd in commands {
+                let local_time = cmd.timestamp.with_timezone(&Local);
+                println!("{} │ {}", local_time.format("%Y-%m-%d %H:%M:%S"), cmd.command);
+                
+                // Show directory on a new line
+                println!("    Directory: {}", cmd.directory);
+                
+                // Show exit code if non-zero
+                if let Some(code) = cmd.exit_code {
+                    if code != 0 {
+                        println!("    Exit Code: {}", code);
+                    }
+                }
+                
+                // Show tags if present
+                if !cmd.tags.is_empty() {
+                    println!("    Tags: {}", cmd.tags.join(", "));
+                }
+                
+                println!("─────────────────────────────────────────────");
+            }
         }
         Commands::Tag { action } => match action {
             TagCommands::Add { command_id, tags } => {

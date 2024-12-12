@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     // Get the database path from the user's home directory
     let db_path = dirs::home_dir()
         .map(|mut path| {
-            path.push(".command-vault");
+            path.push(".lazy-history");
             path.push("history.db");
             path
         })
