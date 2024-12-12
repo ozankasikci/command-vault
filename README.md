@@ -1,15 +1,17 @@
 # Command Vault
 
-An advanced command history manager that helps you track and search your shell commands across sessions.
+An advanced command history manager that helps you track and search your shell commands across sessions. Command Vault stores your shell commands with rich context including working directory, exit codes, and tags, making it easy to find and reuse commands later.
 
 ## Features
 
-- Automatically logs all commands with timestamps and exit codes
-- Search through command history with powerful filters
-- Tag commands for better organization
-- Cross-shell support (Bash, Zsh)
-- Local SQLite database for fast searching
-- Displays commands with context (directory, exit code, timestamp)
+- 🔍 Smart search through command history
+- 🏷️ Tag commands for better organization
+- 📂 Track working directory for each command
+- ❌ Record exit codes to identify failed commands
+- 🕒 Chronological command history
+- 🐚 Cross-shell support (Bash, Zsh)
+- 💾 Local SQLite database for fast searching
+- 🔄 Automatic command logging
 
 ## Installation
 
@@ -22,27 +24,6 @@ An advanced command history manager that helps you track and search your shell c
    ```bash
    cargo install --path .
    ```
-
-## Project Structure
-
-```
-src/
-├── cli/           # Command-line interface code
-│   ├── args.rs    # Command line arguments
-│   ├── commands.rs # Command implementations
-│   └── mod.rs
-├── db/            # Database-related code
-│   ├── models.rs  # Database models
-│   ├── store.rs   # Database operations
-│   └── mod.rs
-├── shell/         # Shell integration
-│   ├── hooks.rs   # Shell hook implementations
-│   └── mod.rs
-├── utils/         # Utility functions
-│   ├── time.rs    # Time-related utilities
-│   └── mod.rs
-└── main.rs        # Application entry point
-```
 
 ## Shell Integration
 
@@ -74,12 +55,27 @@ command-vault add "git push origin main" -t important -t git
 command-vault add "make build" --exit-code 1
 ```
 
+### Listing Commands
+```bash
+# List recent commands (newest first)
+command-vault ls
+
+# List oldest commands first
+command-vault ls --asc
+
+# List only the last 5 commands
+command-vault ls --limit 5
+
+# List the first 5 commands
+command-vault ls --asc -l 5
+```
+
 ### Searching Commands
 ```bash
 # Basic search
 command-vault search "git"
 
-# Limit results
+# Limit search results
 command-vault search "docker" --limit 5
 ```
 
@@ -97,6 +93,23 @@ command-vault tag list
 # Search commands by tag
 command-vault tag search git
 ```
+
+## Command Output Format
+
+Commands are displayed with rich context:
+```
+(123) [2024-12-12 04:41:03] git push origin main
+    Directory: /path/to/project
+    Tags: git, important
+```
+
+Each command entry shows:
+- Command ID in parentheses
+- Timestamp in local timezone
+- The actual command
+- Working directory
+- Exit code (if non-zero)
+- Associated tags (if any)
 
 ## Development
 
