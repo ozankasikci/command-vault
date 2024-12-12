@@ -6,7 +6,7 @@ use chrono::Local;
 mod db;
 
 #[derive(Parser)]
-#[command(name = "lazy-history")]
+#[command(name = "command-vault")]
 #[command(about = "An advanced command history manager", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
     // Get the database path from the user's home directory
     let db_path = dirs::home_dir()
         .map(|mut path| {
-            path.push(".lazy-history");
+            path.push(".command-vault");
             path.push("history.db");
             path
         })

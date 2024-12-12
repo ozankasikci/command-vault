@@ -1,4 +1,4 @@
-# Lazy History
+# Command Vault
 
 An advanced command history manager that helps you track and search your shell commands across sessions.
 
@@ -50,14 +50,14 @@ src/
 
 Add this to your `~/.zshrc`:
 ```bash
-source /path/to/lazy-history/shell/zsh-integration.zsh
+source /path/to/command-vault/shell/zsh-integration.zsh
 ```
 
 ### Bash
 
 Add this to your `~/.bashrc`:
 ```bash
-source /path/to/lazy-history/shell/bash-integration.sh
+source /path/to/command-vault/shell/bash-integration.sh
 ```
 
 ## Usage
@@ -65,37 +65,37 @@ source /path/to/lazy-history/shell/bash-integration.sh
 ### Adding Commands
 ```bash
 # Add a simple command
-lazy-history add "your command here"
+command-vault add "your command here"
 
 # Add a command with tags
-lazy-history add "git push origin main" -t important -t git
+command-vault add "git push origin main" -t important -t git
 
 # Add a command with exit code
-lazy-history add "make build" --exit-code 1
+command-vault add "make build" --exit-code 1
 ```
 
 ### Searching Commands
 ```bash
 # Basic search
-lazy-history search "git"
+command-vault search "git"
 
 # Limit results
-lazy-history search "docker" --limit 5
+command-vault search "docker" --limit 5
 ```
 
 ### Managing Tags
 ```bash
 # Add tags to an existing command
-lazy-history tag add 123 important git
+command-vault tag add 123 important git
 
 # Remove a tag from a command
-lazy-history tag remove 123 important
+command-vault tag remove 123 important
 
 # List all tags and their usage
-lazy-history tag list
+command-vault tag list
 
 # Search commands by tag
-lazy-history tag search git
+command-vault tag search git
 ```
 
 ## Development

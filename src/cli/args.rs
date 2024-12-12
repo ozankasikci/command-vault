@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "lazy-history")]
+#[command(name = "command-vault")]
 #[command(about = "An advanced command history manager", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]

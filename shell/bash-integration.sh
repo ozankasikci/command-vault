@@ -1,12 +1,12 @@
-# Lazy History Bash Integration
+# Command Vault Bash Integration
 
-# Function to log commands to lazy-history
-_lazy_history_log_command() {
+# Function to log commands to command-vault
+_command_vault_log_command() {
     local exit_code=$?
-    local cmd=$(history 1)
+    local cmd=$(HISTTIMEFORMAT= history 1)
     
-    # Extract just the command part (remove the history number)
-    cmd=$(echo "$cmd" | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//')
+    # Extract just the command part
+    cmd=$(echo "$cmd" | sed -e 's/^[[:space:]]*[0-9]*[[:space:]]*//')
     
     # Trim whitespace
     cmd=$(echo "$cmd" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
@@ -21,13 +21,9 @@ _lazy_history_log_command() {
         return
     fi
     
-    # Log the command using lazy-history
-    lazy-history add --exit-code $exit_code "$cmd" &>/dev/null
+    # Log the command using command-vault
+    command-vault add --exit-code $exit_code "$cmd" &>/dev/null
 }
 
-# Add the function to PROMPT_COMMAND
-if [[ -z "$PROMPT_COMMAND" ]]; then
-    PROMPT_COMMAND="_lazy_history_log_command"
-else
-    PROMPT_COMMAND="_lazy_history_log_command;$PROMPT_COMMAND"
-fi
+# Add the function to the PROMPT_COMMAND
+PROMPT_COMMAND="_command_vault_log_command${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
