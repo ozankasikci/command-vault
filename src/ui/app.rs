@@ -109,7 +109,7 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    KeyCode::Down => {
+                    KeyCode::Down | KeyCode::Char('j') => {
                         if let Some(selected) = self.selected {
                             if selected < self.filtered_commands.len() - 1 {
                                 self.selected = Some(selected + 1);
@@ -118,7 +118,7 @@ impl<'a> App<'a> {
                             self.selected = Some(0);
                         }
                     }
-                    KeyCode::Up => {
+                    KeyCode::Up | KeyCode::Char('k') => {
                         if let Some(selected) = self.selected {
                             if selected > 0 {
                                 self.selected = Some(selected - 1);
@@ -144,36 +144,47 @@ impl<'a> App<'a> {
                                     add_app.set_tags(cmd.tags.clone());
                                     add_app.set_exit_code(cmd.exit_code);
                                     
-                                    // Run the add UI
-                                    if let Ok(Some((new_command, new_tags, new_exit_code))) = add_app.run() {
-                                        // Update command
-                                        let updated_cmd = Command {
-                                            id: cmd.id,
-                                            command: new_command,
-                                            timestamp: cmd.timestamp,
-                                            directory: cmd.directory,
-                                            exit_code: new_exit_code,
-                                            tags: new_tags,
-                                        };
-                                        
-                                        if let Err(e) = self.db.update_command(&updated_cmd) {
-                                            setup_terminal()?;
-                                            self.message = Some((format!("Failed to update command: {}", e), Color::Red));
-                                        } else {
-                                            // Update local command list
-                                            if let Some(cmd) = self.commands.get_mut(idx) {
-                                                *cmd = updated_cmd;
+                                    let result = add_app.run();
+                                    
+                                    // Re-initialize terminal and force redraw
+                                    let mut new_terminal = setup_terminal()?;
+                                    new_terminal.clear()?;
+                                    *terminal = new_terminal;
+                                    terminal.draw(|f| self.ui(f))?;
+                                    
+                                    match result {
+                                        Ok(Some((new_command, new_tags, new_exit_code))) => {
+                                            // Update command
+                                            let updated_cmd = Command {
+                                                id: cmd.id,
+                                                command: new_command,
+                                                timestamp: cmd.timestamp,
+                                                directory: cmd.directory,
+                                                exit_code: new_exit_code,
+                                                tags: new_tags,
+                                            };
+                                            
+                                            if let Err(e) = self.db.update_command(&updated_cmd) {
+                                                self.message = Some((format!("Failed to update command: {}", e), Color::Red));
+                                            } else {
+                                                // Update local command list
+                                                if let Some(cmd) = self.commands.get_mut(idx) {
+                                                    *cmd = updated_cmd;
+                                                }
+                                                self.message = Some(("Command updated successfully!".to_string(), Color::Green));
                                             }
-                                            setup_terminal()?;
-                                            self.message = Some(("Command updated successfully!".to_string(), Color::Green));
                                         }
-                                    } else {
-                                        setup_terminal()?;
+                                        Ok(None) => {
+                                            self.message = Some(("Edit cancelled".to_string(), Color::Yellow));
+                                        }
+                                        Err(e) => {
+                                            self.message = Some((format!("Error during edit: {}", e), Color::Red));
+                                        }
                                     }
-                                    continue;
                                 }
                             }
                         }
+                        continue;
                     }
                     KeyCode::Char('d') => {
                         if let Some(selected) = self.selected {
@@ -336,7 +347,7 @@ impl<'a> App<'a> {
                 Span::raw("Press "),
                 Span::styled("q", Style::default().fg(Color::Yellow)),
                 Span::raw(" to quit, "),
-                Span::styled("↑↓", Style::default().fg(Color::Yellow)),
+                Span::styled("↑↓/jk", Style::default().fg(Color::Yellow)),
                 Span::raw(" to navigate, "),
                 Span::styled("c", Style::default().fg(Color::Yellow)),
                 Span::raw(" or "),
@@ -375,13 +386,15 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
-    Terminal::new(backend).map_err(|e| e.into())
+    let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+    Ok(terminal)
 }
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    disable_raw_mode()?;
     Ok(())
 }
 
