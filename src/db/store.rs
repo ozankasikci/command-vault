@@ -369,4 +369,24 @@ impl Database {
         tx.commit()?;
         Ok(())
     }
+
+    pub fn delete_command(&mut self, command_id: i64) -> Result<()> {
+        // First delete from command_tags
+        self.conn.execute(
+            "DELETE FROM command_tags WHERE command_id = ?",
+            [command_id],
+        )?;
+
+        // Then delete from commands
+        let rows_affected = self.conn.execute(
+            "DELETE FROM commands WHERE id = ?",
+            [command_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(anyhow!("Command not found"));
+        }
+
+        Ok(())
+    }
 }

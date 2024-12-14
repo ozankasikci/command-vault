@@ -53,11 +53,17 @@ impl<'a> App<'a> {
             terminal.draw(|f| self.ui(f))?;
 
             if let Event::Key(key) = event::read()? {
-                match (key.code, key.modifiers) {
-                    (KeyCode::Char('q'), _) => return Ok(()),
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Ok(()),
-                    (KeyCode::Char('?'), _) => self.show_help = !self.show_help,
-                    (KeyCode::Char('c'), _) => {
+                match key.code {
+                    KeyCode::Char('q') => {
+                        return Ok(());
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(());
+                    }
+                    KeyCode::Char('?') => {
+                        self.show_help = !self.show_help;
+                    }
+                    KeyCode::Char('c') => {
                         if let Some(selected) = self.selected {
                             if let Some(&idx) = self.filtered_commands.get(selected) {
                                 if let Some(cmd) = self.commands.get(idx) {
@@ -67,7 +73,7 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    (KeyCode::Char('y'), _) => {
+                    KeyCode::Char('y') => {
                         if let Some(selected) = self.selected {
                             if let Some(&idx) = self.filtered_commands.get(selected) {
                                 if let Some(cmd) = self.commands.get(idx) {
@@ -77,7 +83,7 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    (KeyCode::Enter, _) | (KeyCode::Char('x'), _) => {
+                    KeyCode::Enter | KeyCode::Char('x') => {
                         if let Some(selected) = self.selected {
                             if let Some(&idx) = self.filtered_commands.get(selected) {
                                 if let Some(cmd) = self.commands.get(idx) {
@@ -103,7 +109,7 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    (KeyCode::Down, _) => {
+                    KeyCode::Down => {
                         if let Some(selected) = self.selected {
                             if selected < self.filtered_commands.len() - 1 {
                                 self.selected = Some(selected + 1);
@@ -112,7 +118,7 @@ impl<'a> App<'a> {
                             self.selected = Some(0);
                         }
                     }
-                    (KeyCode::Up, _) => {
+                    KeyCode::Up => {
                         if let Some(selected) = self.selected {
                             if selected > 0 {
                                 self.selected = Some(selected - 1);
@@ -121,64 +127,93 @@ impl<'a> App<'a> {
                             self.selected = Some(self.filtered_commands.len() - 1);
                         }
                     }
-                    (KeyCode::Char('/'), _) => {
+                    KeyCode::Char('/') => {
                         self.filter_text.clear();
                         self.message = Some(("Type to filter commands...".to_string(), Color::Blue));
                     }
-                    (KeyCode::Char(c), _) => {
-                        if c == 'e' {
-                            if let Some(selected) = self.selected {
-                                if let Some(&idx) = self.filtered_commands.get(selected) {
-                                    if let Some(cmd) = self.commands.get(idx).cloned() {
-                                        // Exit TUI temporarily
-                                        restore_terminal(terminal)?;
+                    KeyCode::Char('e') => {
+                        if let Some(selected) = self.selected {
+                            if let Some(&idx) = self.filtered_commands.get(selected) {
+                                if let Some(cmd) = self.commands.get(idx).cloned() {
+                                    // Exit TUI temporarily
+                                    restore_terminal(terminal)?;
+                                    
+                                    // Create AddCommandApp with existing command data
+                                    let mut add_app = AddCommandApp::new();
+                                    add_app.set_command(cmd.command.clone());
+                                    add_app.set_tags(cmd.tags.clone());
+                                    add_app.set_exit_code(cmd.exit_code);
+                                    
+                                    // Run the add UI
+                                    if let Ok(Some((new_command, new_tags, new_exit_code))) = add_app.run() {
+                                        // Update command
+                                        let updated_cmd = Command {
+                                            id: cmd.id,
+                                            command: new_command,
+                                            timestamp: cmd.timestamp,
+                                            directory: cmd.directory,
+                                            exit_code: new_exit_code,
+                                            tags: new_tags,
+                                        };
                                         
-                                        // Create AddCommandApp with existing command data
-                                        let mut add_app = AddCommandApp::new();
-                                        add_app.set_command(cmd.command.clone());
-                                        add_app.set_tags(cmd.tags.clone());
-                                        add_app.set_exit_code(cmd.exit_code);
-                                        
-                                        // Run the add UI
-                                        if let Ok(Some((new_command, new_tags, new_exit_code))) = add_app.run() {
-                                            // Update command
-                                            let updated_cmd = Command {
-                                                id: cmd.id,
-                                                command: new_command,
-                                                timestamp: cmd.timestamp,
-                                                directory: cmd.directory,
-                                                exit_code: new_exit_code,
-                                                tags: new_tags,
-                                            };
-                                            
-                                            if let Err(e) = self.db.update_command(&updated_cmd) {
-                                                setup_terminal()?;
-                                                self.message = Some((format!("Failed to update command: {}", e), Color::Red));
-                                            } else {
-                                                // Update local command list
-                                                if let Some(cmd) = self.commands.get_mut(idx) {
-                                                    *cmd = updated_cmd;
-                                                }
-                                                setup_terminal()?;
-                                                self.message = Some(("Command updated successfully!".to_string(), Color::Green));
-                                            }
-                                        } else {
+                                        if let Err(e) = self.db.update_command(&updated_cmd) {
                                             setup_terminal()?;
+                                            self.message = Some((format!("Failed to update command: {}", e), Color::Red));
+                                        } else {
+                                            // Update local command list
+                                            if let Some(cmd) = self.commands.get_mut(idx) {
+                                                *cmd = updated_cmd;
+                                            }
+                                            setup_terminal()?;
+                                            self.message = Some(("Command updated successfully!".to_string(), Color::Green));
                                         }
-                                        continue;
+                                    } else {
+                                        setup_terminal()?;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        if let Some(selected) = self.selected {
+                            if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
+                                if let Some(command_id) = self.commands[filtered_idx].id {
+                                    match self.db.delete_command(command_id) {
+                                        Ok(_) => {
+                                            self.commands.remove(filtered_idx);
+                                            self.message = Some(("Command deleted successfully".to_string(), Color::Green));
+                                            self.update_filtered_commands();
+                                            if self.selected.unwrap() >= self.filtered_commands.len() {
+                                                self.selected = if self.filtered_commands.is_empty() {
+                                                    None
+                                                } else {
+                                                    Some(self.filtered_commands.len() - 1)
+                                                };
+                                            }
+                                        }
+                                        Err(e) => {
+                                            self.message = Some((format!("Failed to delete command: {}", e), Color::Red));
+                                        }
                                     }
                                 }
                             }
+                        }
+                    }
+                    KeyCode::Char(c) => {
+                        if c == '/' {  // Skip if it's the '/' character that started filter mode
+                            self.filter_text.clear();
+                            self.message = Some(("Type to filter commands...".to_string(), Color::Blue));
                         } else if c != '/' {  // Skip if it's the '/' character that started filter mode
                             self.filter_text.push(c);
                             self.update_filtered_commands();
                         }
                     }
-                    (KeyCode::Backspace, _) if !self.filter_text.is_empty() => {
+                    KeyCode::Backspace if !self.filter_text.is_empty() => {
                         self.filter_text.pop();
                         self.update_filtered_commands();
                     }
-                    (KeyCode::Esc, _) => {
+                    KeyCode::Esc => {
                         if !self.filter_text.is_empty() {
                             self.filter_text.clear();
                             self.update_filtered_commands();
@@ -309,6 +344,8 @@ impl<'a> App<'a> {
                 Span::raw(" to copy, "),
                 Span::styled("e", Style::default().fg(Color::Yellow)),
                 Span::raw(" to edit, "),
+                Span::styled("d", Style::default().fg(Color::Yellow)),
+                Span::raw(" to delete, "),
                 Span::styled("Enter", Style::default().fg(Color::Yellow)),
                 Span::raw(" or "),
                 Span::styled("x", Style::default().fg(Color::Yellow)),

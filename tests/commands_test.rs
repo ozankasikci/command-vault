@@ -218,33 +218,17 @@ fn test_add_command_with_tags() -> Result<()> {
     fs::create_dir_all(temp_dir.path())?;
     let mut db = Database::new(db_path.to_str().unwrap())?;
     
-    // Change to the test directory
-    let original_dir = env::current_dir()?;
-    env::set_current_dir(temp_dir.path())?;
-    
-    let command = "git commit".to_string();
-    let add_command = Commands::Add { 
-        command, 
-        exit_code: None, 
-        tags: vec!["git".to_string(), "vcs".to_string()] 
+    // Add a command with tags
+    let cmd = Command {
+        id: None,
+        command: "git commit".to_string(),
+        timestamp: Utc::now(),
+        directory: temp_dir.path().to_string_lossy().into_owned(),
+        exit_code: None,
+        tags: vec!["git".to_string(), "vcs".to_string()],
     };
     
-    cli::handle_command(add_command, &mut db)?;
-    
-    // Test tag listing
-    let tag_list_command = Commands::Tag { 
-        action: TagCommands::List 
-    };
-    cli::handle_command(tag_list_command, &mut db)?;
-    
-    // Test tag search
-    let tag_search_command = Commands::Tag { 
-        action: TagCommands::Search { 
-            tag: "git".to_string(),
-            limit: 10
-        } 
-    };
-    cli::handle_command(tag_search_command, &mut db)?;
+    let command_id = db.add_command(&cmd)?;
     
     // Verify the command was added with tags
     let commands = db.search_by_tag("git", 10)?;
@@ -254,20 +238,15 @@ fn test_add_command_with_tags() -> Result<()> {
     assert!(commands[0].tags.contains(&"vcs".to_string()));
     
     // Test tag removal
-    let tag_remove_command = Commands::Tag { 
-        action: TagCommands::Remove { 
-            command_id: commands[0].id.unwrap(),
-            tag: "vcs".to_string()
-        } 
-    };
-    cli::handle_command(tag_remove_command, &mut db)?;
+    db.remove_tag_from_command(command_id, "vcs")?;
     
     // Verify tag was removed
     let commands = db.search_by_tag("vcs", 10)?;
     assert_eq!(commands.len(), 0);
     
-    // Restore the original directory
-    env::set_current_dir(original_dir)?;
+    // Verify other tag still exists
+    let commands = db.search_by_tag("git", 10)?;
+    assert_eq!(commands.len(), 1);
     
     Ok(())
 }
@@ -281,28 +260,61 @@ fn test_search_commands() -> Result<()> {
     fs::create_dir_all(temp_dir.path())?;
     let mut db = Database::new(db_path.to_str().unwrap())?;
     
+    let directory = temp_dir.path().to_string_lossy().into_owned();
+    
     // Add some test commands
     let commands = vec![
-        "git commit -m 'test'",
-        "git push origin main",
-        "cargo test",
-        "cargo build",
+        Command {
+            id: None,
+            command: "git commit -m 'test'".to_string(),
+            timestamp: Utc::now(),
+            directory: directory.clone(),
+            exit_code: None,
+            tags: vec![],
+        },
+        Command {
+            id: None,
+            command: "git push origin main".to_string(),
+            timestamp: Utc::now(),
+            directory: directory.clone(),
+            exit_code: None,
+            tags: vec![],
+        },
+        Command {
+            id: None,
+            command: "cargo test".to_string(),
+            timestamp: Utc::now(),
+            directory: directory.clone(),
+            exit_code: None,
+            tags: vec![],
+        },
+        Command {
+            id: None,
+            command: "cargo build".to_string(),
+            timestamp: Utc::now(),
+            directory: directory.clone(),
+            exit_code: None,
+            tags: vec![],
+        },
     ];
     
     for cmd in commands {
-        let add_command = Commands::Add { 
-            command: cmd.to_string(), 
-            exit_code: None, 
-            tags: vec![] 
-        };
-        cli::handle_command(add_command, &mut db)?;
+        db.add_command(&cmd)?;
     }
     
-    // Instead of using handle_command for search, directly use the database
+    // Verify search results
     let results = db.search_commands("git", 10)?;
     assert_eq!(results.len(), 2);
     assert!(results.iter().any(|c| c.command == "git commit -m 'test'"));
     assert!(results.iter().any(|c| c.command == "git push origin main"));
+    
+    // Test search with limit
+    let results = db.search_commands("git", 1)?;
+    assert_eq!(results.len(), 1);
+    
+    // Test search with no matches
+    let results = db.search_commands("nonexistent", 10)?;
+    assert_eq!(results.len(), 0);
     
     Ok(())
 }
@@ -330,6 +342,79 @@ fn test_execute_command() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, command);
+    
+    Ok(())
+}
+
+#[test]
+fn test_empty_command_validation() -> Result<()> {
+    init_test_env();
+    
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    fs::create_dir_all(temp_dir.path())?;
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+    
+    // Try adding an empty command
+    let add_command = Commands::Add { 
+        command: "".to_string(), 
+        exit_code: None, 
+        tags: vec![] 
+    };
+    
+    // Should return an error
+    assert!(cli::handle_command(add_command, &mut db).is_err());
+    
+    // Try adding a whitespace-only command
+    let add_command = Commands::Add { 
+        command: "   ".to_string(), 
+        exit_code: None, 
+        tags: vec![] 
+    };
+    
+    // Should return an error
+    assert!(cli::handle_command(add_command, &mut db).is_err());
+    
+    // Verify no commands were added
+    let commands = db.list_commands(10, false)?;
+    assert_eq!(commands.len(), 0);
+    
+    Ok(())
+}
+
+#[test]
+fn test_delete_command() -> Result<()> {
+    init_test_env();
+    
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    fs::create_dir_all(temp_dir.path())?;
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+    
+    // Add a command
+    let command = "test command".to_string();
+    let add_command = Commands::Add { 
+        command: command.clone(), 
+        exit_code: None, 
+        tags: vec![] 
+    };
+    
+    cli::handle_command(add_command, &mut db)?;
+    
+    // Get the command ID
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    let command_id = commands[0].id.unwrap();
+    
+    // Delete the command
+    db.delete_command(command_id)?;
+    
+    // Verify command was deleted
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 0);
+    
+    // Try deleting non-existent command
+    assert!(db.delete_command(999).is_err());
     
     Ok(())
 }

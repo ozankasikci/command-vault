@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use chrono::Local;
 use std::io::{self, Stdout};
 use crossterm::{
@@ -15,7 +15,7 @@ use ratatui::{
 };
 
 use crate::db::{Command, Database};
-use crate::ui::{App, AddCommandApp};
+use crate::ui::App;
 use super::args::{Commands, TagCommands};
 
 fn print_commands(commands: &[Command]) -> Result<()> {
@@ -92,6 +92,11 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
 pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
     match command {
         Commands::Add { command, exit_code, tags } => {
+            // Don't allow empty commands
+            if command.trim().is_empty() {
+                return Err(anyhow!("Cannot add empty command"));
+            }
+
             let directory = std::env::current_dir()?.to_string_lossy().into_owned();
             let timestamp = chrono::Utc::now();
             let cmd = Command {
