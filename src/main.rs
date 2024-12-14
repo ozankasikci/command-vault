@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
-use lazy_history::cli::args::Cli;
-use lazy_history::cli::handle_command;
-use lazy_history::db::Database;
+use command_vault::cli::args::Cli;
+use command_vault::cli::handle_command;
+use command_vault::db::Database;
 use std::path::PathBuf;
 
 mod cli;
@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     // Get the database path from the user's home directory
     let db_path = dirs::home_dir()
         .map(|mut path| {
-            path.push(".lazy-history");
+            path.push(".command-vault");
             path.push("history.db");
             path
         })

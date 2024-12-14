@@ -129,7 +129,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             }
 
             // Check if TUI should be disabled (useful for testing or non-interactive environments)
-            if std::env::var("LAZY_HISTORY_NO_TUI").is_ok() {
+            if std::env::var("COMMAND_VAULT_NO_TUI").is_ok() {
                 for cmd in commands {
                     println!("{}: {} ({})", cmd.id.unwrap_or(0), cmd.command, cmd.directory);
                 }

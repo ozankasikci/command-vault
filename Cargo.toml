@@ -1,5 +1,5 @@
 [package]
-name = "lazy-history"
+name = "command-vault"
 version = "0.1.0"
 edition = "2021"
 authors = ["Ozan Kaşikci"]

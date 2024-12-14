@@ -1,6 +1,6 @@
 use anyhow::Result;
-use lazy_history::cli::{self, args::{Commands, TagCommands}};
-use lazy_history::db::{Database, Command};
+use command_vault::cli::{self, args::{Commands, TagCommands}};
+use command_vault::db::{Database, Command};
 use tempfile::tempdir;
 use chrono::{Utc, TimeZone};
 use std::fs;
