@@ -13,7 +13,7 @@ pub enum Commands {
     /// Add a new command to history
     Add {
         /// The command to add
-        #[arg(required = true)]
+        #[arg(required = false, default_value = "")]
         command: String,
         
         /// Optional exit code of the command

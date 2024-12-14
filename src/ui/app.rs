@@ -1,7 +1,7 @@
 use std::io::{self, Stdout};
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -14,20 +14,30 @@ use ratatui::{
     Terminal,
 };
 
-use crate::db::Command;
+use crate::db::{Command, Database};
+use crate::ui::AddCommandApp;
 
-pub struct App {
+pub struct App<'a> {
     pub commands: Vec<Command>,
     pub selected: Option<usize>,
     pub show_help: bool,
+    pub message: Option<(String, Color)>,
+    pub filter_text: String,
+    pub filtered_commands: Vec<usize>,
+    pub db: &'a mut Database,
 }
 
-impl App {
-    pub fn new(commands: Vec<Command>) -> App {
+impl<'a> App<'a> {
+    pub fn new(commands: Vec<Command>, db: &'a mut Database) -> App<'a> {
+        let filtered_commands: Vec<usize> = (0..commands.len()).collect();
         App {
             commands,
             selected: None,
             show_help: false,
+            message: None,
+            filter_text: String::new(),
+            filtered_commands,
+            db,
         }
     }
 
@@ -43,29 +53,159 @@ impl App {
             terminal.draw(|f| self.ui(f))?;
 
             if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('?') => self.show_help = !self.show_help,
-                    KeyCode::Down => {
+                match (key.code, key.modifiers) {
+                    (KeyCode::Char('q'), _) => return Ok(()),
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => return Ok(()),
+                    (KeyCode::Char('?'), _) => self.show_help = !self.show_help,
+                    (KeyCode::Char('c'), _) => {
                         if let Some(selected) = self.selected {
-                            if selected < self.commands.len() - 1 {
+                            if let Some(&idx) = self.filtered_commands.get(selected) {
+                                if let Some(cmd) = self.commands.get(idx) {
+                                    copy_to_clipboard(&cmd.command)?;
+                                    self.message = Some(("Command copied to clipboard!".to_string(), Color::Green));
+                                }
+                            }
+                        }
+                    }
+                    (KeyCode::Char('y'), _) => {
+                        if let Some(selected) = self.selected {
+                            if let Some(&idx) = self.filtered_commands.get(selected) {
+                                if let Some(cmd) = self.commands.get(idx) {
+                                    copy_to_clipboard(&cmd.command)?;
+                                    self.message = Some(("Command copied to clipboard!".to_string(), Color::Green));
+                                }
+                            }
+                        }
+                    }
+                    (KeyCode::Enter, _) | (KeyCode::Char('x'), _) => {
+                        if let Some(selected) = self.selected {
+                            if let Some(&idx) = self.filtered_commands.get(selected) {
+                                if let Some(cmd) = self.commands.get(idx) {
+                                    // Exit TUI temporarily
+                                    restore_terminal(terminal)?;
+                                    
+                                    // Execute the command
+                                    let output = std::process::Command::new("sh")
+                                        .arg("-c")
+                                        .arg(&cmd.command)
+                                        .status();
+
+                                    match output {
+                                        Ok(_) => return Ok(()),
+                                        Err(e) => {
+                                            // Re-enable TUI and show error
+                                            setup_terminal()?;
+                                            self.message = Some((format!("Failed to execute command: {}", e), Color::Red));
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (KeyCode::Down, _) => {
+                        if let Some(selected) = self.selected {
+                            if selected < self.filtered_commands.len() - 1 {
                                 self.selected = Some(selected + 1);
                             }
-                        } else {
+                        } else if !self.filtered_commands.is_empty() {
                             self.selected = Some(0);
                         }
                     }
-                    KeyCode::Up => {
+                    (KeyCode::Up, _) => {
                         if let Some(selected) = self.selected {
                             if selected > 0 {
                                 self.selected = Some(selected - 1);
                             }
-                        } else {
-                            self.selected = Some(0);
+                        } else if !self.filtered_commands.is_empty() {
+                            self.selected = Some(self.filtered_commands.len() - 1);
+                        }
+                    }
+                    (KeyCode::Char('/'), _) => {
+                        self.filter_text.clear();
+                        self.message = Some(("Type to filter commands...".to_string(), Color::Blue));
+                    }
+                    (KeyCode::Char(c), _) => {
+                        if c == 'e' {
+                            if let Some(selected) = self.selected {
+                                if let Some(&idx) = self.filtered_commands.get(selected) {
+                                    if let Some(cmd) = self.commands.get(idx).cloned() {
+                                        // Exit TUI temporarily
+                                        restore_terminal(terminal)?;
+                                        
+                                        // Create AddCommandApp with existing command data
+                                        let mut add_app = AddCommandApp::new();
+                                        add_app.set_command(cmd.command.clone());
+                                        add_app.set_tags(cmd.tags.clone());
+                                        add_app.set_exit_code(cmd.exit_code);
+                                        
+                                        // Run the add UI
+                                        if let Ok(Some((new_command, new_tags, new_exit_code))) = add_app.run() {
+                                            // Update command
+                                            let updated_cmd = Command {
+                                                id: cmd.id,
+                                                command: new_command,
+                                                timestamp: cmd.timestamp,
+                                                directory: cmd.directory,
+                                                exit_code: new_exit_code,
+                                                tags: new_tags,
+                                            };
+                                            
+                                            if let Err(e) = self.db.update_command(&updated_cmd) {
+                                                setup_terminal()?;
+                                                self.message = Some((format!("Failed to update command: {}", e), Color::Red));
+                                            } else {
+                                                // Update local command list
+                                                if let Some(cmd) = self.commands.get_mut(idx) {
+                                                    *cmd = updated_cmd;
+                                                }
+                                                setup_terminal()?;
+                                                self.message = Some(("Command updated successfully!".to_string(), Color::Green));
+                                            }
+                                        } else {
+                                            setup_terminal()?;
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }
+                        } else if c != '/' {  // Skip if it's the '/' character that started filter mode
+                            self.filter_text.push(c);
+                            self.update_filtered_commands();
+                        }
+                    }
+                    (KeyCode::Backspace, _) if !self.filter_text.is_empty() => {
+                        self.filter_text.pop();
+                        self.update_filtered_commands();
+                    }
+                    (KeyCode::Esc, _) => {
+                        if !self.filter_text.is_empty() {
+                            self.filter_text.clear();
+                            self.update_filtered_commands();
                         }
                     }
                     _ => {}
                 }
+            }
+        }
+    }
+
+    fn update_filtered_commands(&mut self) {
+        let search_term = self.filter_text.to_lowercase();
+        self.filtered_commands = (0..self.commands.len())
+            .filter(|&i| {
+                let cmd = &self.commands[i];
+                cmd.command.to_lowercase().contains(&search_term) ||
+                cmd.tags.iter().any(|tag| tag.to_lowercase().contains(&search_term))
+            })
+            .collect();
+        
+        // Update selection
+        if self.filtered_commands.is_empty() {
+            self.selected = None;
+        } else if let Some(selected) = self.selected {
+            if selected >= self.filtered_commands.len() {
+                self.selected = Some(self.filtered_commands.len() - 1);
             }
         }
     }
@@ -77,6 +217,7 @@ impl App {
             .constraints([
                 Constraint::Length(3),  // Title
                 Constraint::Min(0),     // Commands list
+                Constraint::Length(1),  // Filter
                 Constraint::Length(3),  // Status bar
             ])
             .split(f.size());
@@ -88,11 +229,9 @@ impl App {
         f.render_widget(title, chunks[0]);
 
         // Commands list
-        let commands: Vec<ListItem> = self
-            .commands
-            .iter()
-            .enumerate()
-            .map(|(i, cmd)| {
+        let commands: Vec<ListItem> = self.filtered_commands.iter()
+            .map(|&i| {
+                let cmd = &self.commands[i];
                 let local_time = cmd.timestamp.with_timezone(&chrono::Local);
                 let time_str = local_time.format("%Y-%m-%d %H:%M:%S").to_string();
                 
@@ -127,29 +266,55 @@ impl App {
                     }
                 }
 
-                let style = if Some(i) == self.selected {
-                    Style::default().add_modifier(Modifier::REVERSED)
-                } else {
-                    Style::default()
-                };
-
-                ListItem::new(Line::from(spans)).style(style)
+                ListItem::new(Line::from(spans))
             })
             .collect();
 
         let commands = List::new(commands)
             .block(Block::default().borders(Borders::ALL).title("Commands"))
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        f.render_widget(commands, chunks[1]);
+        
+        let commands_state = self.selected.map(|i| {
+            let mut state = ratatui::widgets::ListState::default();
+            state.select(Some(i));
+            state
+        });
 
-        // Status bar
-        let status = if self.show_help {
+        if let Some(state) = commands_state {
+            f.render_stateful_widget(commands, chunks[1], &mut state.clone());
+        } else {
+            f.render_widget(commands, chunks[1]);
+        }
+
+        // Filter
+        if !self.filter_text.is_empty() {
+            let filter = Paragraph::new(format!("Filter: {}", self.filter_text))
+                .style(Style::default().fg(Color::Yellow));
+            f.render_widget(filter, chunks[2]);
+        }
+
+        // Status bar with help text or message
+        let status = if let Some((msg, color)) = &self.message {
+            vec![Span::styled(msg, Style::default().fg(*color))]
+        } else if self.show_help {
             vec![
                 Span::raw("Press "),
                 Span::styled("q", Style::default().fg(Color::Yellow)),
                 Span::raw(" to quit, "),
                 Span::styled("↑↓", Style::default().fg(Color::Yellow)),
                 Span::raw(" to navigate, "),
+                Span::styled("c", Style::default().fg(Color::Yellow)),
+                Span::raw(" or "),
+                Span::styled("y", Style::default().fg(Color::Yellow)),
+                Span::raw(" to copy, "),
+                Span::styled("e", Style::default().fg(Color::Yellow)),
+                Span::raw(" to edit, "),
+                Span::styled("Enter", Style::default().fg(Color::Yellow)),
+                Span::raw(" or "),
+                Span::styled("x", Style::default().fg(Color::Yellow)),
+                Span::raw(" to execute, "),
+                Span::styled("/", Style::default().fg(Color::Yellow)),
+                Span::raw(" to filter, "),
                 Span::styled("?", Style::default().fg(Color::Yellow)),
                 Span::raw(" to toggle help"),
             ]
@@ -164,7 +329,7 @@ impl App {
         let status = Paragraph::new(Line::from(status))
             .block(Block::default().borders(Borders::ALL))
             .style(Style::default().fg(Color::Gray));
-        f.render_widget(status, chunks[2]);
+        f.render_widget(status, chunks[3]);
     }
 }
 
@@ -180,5 +345,41 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+    Ok(())
+}
+
+fn copy_to_clipboard(text: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let mut child = Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(text.as_bytes())?;
+        }
+        
+        child.wait()?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let mut child = Command::new("xclip")
+            .arg("-selection")
+            .arg("clipboard")
+            .stdin(std::process::Stdio::piped())
+            .spawn()?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(text.as_bytes())?;
+        }
+        
+        child.wait()?;
+    }
+    
     Ok(())
 }

@@ -6,14 +6,23 @@ use super::models::Command;
 
 pub struct Database {
     conn: Connection,
+    path: String,
 }
 
 impl Database {
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
-        let db = Database { conn };
+        let db = Database { conn, path: path.to_string() };
         db.init()?;
         Ok(db)
+    }
+
+    pub fn clone_with_new_connection(&self) -> Result<Self> {
+        let conn = Connection::open(&self.path)?;
+        Ok(Database {
+            conn,
+            path: self.path.clone(),
+        })
     }
 
     fn init(&self) -> Result<()> {
@@ -304,5 +313,60 @@ impl Database {
         }
         
         Ok(commands)
+    }
+
+    pub fn update_command(&mut self, command: &Command) -> Result<()> {
+        if command.id.is_none() {
+            return Err(anyhow!("Cannot update command without id"));
+        }
+
+        let tx = self.conn.transaction()?;
+        
+        // Update command
+        tx.execute(
+            "UPDATE commands 
+             SET command = ?1, 
+                 timestamp = ?2,
+                 directory = ?3,
+                 exit_code = ?4
+             WHERE id = ?5",
+            rusqlite::params![
+                command.command,
+                command.timestamp.to_rfc3339(),
+                command.directory,
+                command.exit_code,
+                command.id.unwrap()
+            ],
+        )?;
+
+        // Delete existing tags
+        tx.execute(
+            "DELETE FROM command_tags WHERE command_id = ?1",
+            [command.id.unwrap()],
+        )?;
+
+        // Add new tags using the same transaction
+        for tag in &command.tags {
+            // Insert or get tag
+            tx.execute(
+                "INSERT OR IGNORE INTO tags (name) VALUES (?1)",
+                [tag],
+            )?;
+            
+            let tag_id: i64 = tx.query_row(
+                "SELECT id FROM tags WHERE name = ?1",
+                [tag],
+                |row| row.get(0),
+            )?;
+            
+            // Link command to tag
+            tx.execute(
+                "INSERT OR IGNORE INTO command_tags (command_id, tag_id) VALUES (?1, ?2)",
+                rusqlite::params![command.id.unwrap(), tag_id],
+            )?;
+        }
+        
+        tx.commit()?;
+        Ok(())
     }
 }

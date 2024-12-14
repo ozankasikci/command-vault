@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Command {
     pub id: Option<i64>,
     pub command: String,
