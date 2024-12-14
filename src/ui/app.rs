@@ -195,12 +195,11 @@ impl<'a> App<'a> {
                                             self.commands.remove(filtered_idx);
                                             self.message = Some(("Command deleted successfully".to_string(), Color::Green));
                                             self.update_filtered_commands();
-                                            if self.selected.unwrap() >= self.filtered_commands.len() {
-                                                self.selected = if self.filtered_commands.is_empty() {
-                                                    None
-                                                } else {
-                                                    Some(self.filtered_commands.len() - 1)
-                                                };
+                                            // Update selection after deletion
+                                            if self.filtered_commands.is_empty() {
+                                                self.selected = None;
+                                            } else {
+                                                self.selected = Some(selected.min(self.filtered_commands.len() - 1));
                                             }
                                         }
                                         Err(e) => {

@@ -13,8 +13,8 @@ pub enum Commands {
     /// Add a new command to history
     Add {
         /// The command to add
-        #[arg(required = false, default_value = "")]
-        command: String,
+        #[arg(required = true, trailing_var_arg = true)]
+        command: Vec<String>,
         
         /// Optional exit code of the command
         #[arg(long)]
