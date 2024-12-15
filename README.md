@@ -63,13 +63,19 @@ Command Vault can be used both from the command line and through its Terminal Us
 ```bash
 # Add a command with tags
 command-vault add --tags git,deploy git push origin main
+```
+![Adding Command](demo/add.gif)
 
+```bash
 # Search commands
 command-vault search "git push"
 
 # List recent commands
 command-vault ls
+```
+![Listing Commands](demo/ls.gif)
 
+```bash
 # Delete a command
 command-vault delete <command-id>
 
