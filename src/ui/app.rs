@@ -113,11 +113,16 @@ impl<'a> App<'a> {
                                         .arg("-c")
                                         .arg(&final_command)
                                         .current_dir(&cmd.directory)
-                                        .status();
+                                        .output();
 
                                     match output {
-                                        Ok(status) => {
-                                            println!("Command exited with status: {}", status);
+                                        Ok(output) => {
+                                            if !output.stdout.is_empty() {
+                                                println!("{}", String::from_utf8_lossy(&output.stdout));
+                                            }
+                                            if !output.stderr.is_empty() {
+                                                println!("{}", String::from_utf8_lossy(&output.stderr));
+                                            }
                                             return Ok(());
                                         }
                                         Err(e) => {
