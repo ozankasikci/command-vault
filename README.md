@@ -94,7 +94,9 @@ For easier access, you can add aliases to your shell configuration:
 
 ### For Bash/Zsh (add to ~/.zshrc or ~/.bashrc)
 ```bash
+# to use as cmdv:
 alias cmdv='command-vault'
+# or to use as cv:
 alias cv='command-vault'
 ```
 
