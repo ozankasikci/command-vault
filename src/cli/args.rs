@@ -19,9 +19,6 @@ pub enum Commands {
     Add {
         /// Command to add
         command: Vec<String>,
-        /// Exit code of the command
-        #[arg(short, long)]
-        exit_code: Option<i32>,
         /// Tags to add to the command
         #[arg(short, long)]
         tags: Vec<String>,

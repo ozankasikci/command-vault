@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Terminal,
 };
+use colored::*;
 
 use crate::db::{Command, Database};
 use crate::ui::App;
@@ -80,14 +81,6 @@ fn print_commands_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, commands
                 Span::raw("    Directory: "),
                 Span::raw(&cmd.directory),
             ]));
-            if let Some(code) = cmd.exit_code {
-                if code != 0 {
-                    lines.push(Line::from(vec![
-                        Span::raw("    Exit Code: "),
-                        Span::styled(code.to_string(), Style::default().fg(Color::Red)),
-                    ]));
-                }
-            }
             if !cmd.tags.is_empty() {
                 lines.push(Line::from(vec![
                     Span::raw("    Tags: "),
@@ -120,7 +113,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
 
 pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
     match command {
-        Commands::Add { command, exit_code, tags } => {
+        Commands::Add { command, tags } => {
             // Just join the arguments literally without any shell expansion
             let command_str = command.join(" ");
             
@@ -140,7 +133,6 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command: command_str,
                 timestamp,
                 directory,
-                exit_code,
                 tags,
                 parameters,
             };
@@ -240,22 +232,28 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command.command.clone()
             };
             
-            println!("\nCommand to execute: {}", final_command);
+            println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
+            println!("{}: {}", "Directory".green().bold(), command.directory.cyan());
             
-            // Skip confirmation in test environment
-            if std::env::var("COMMAND_VAULT_TEST").is_err() {
-                println!("Press Enter to continue or Ctrl+C to cancel...");
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
-            }
-            
+            // Execute the command
             let output = std::process::Command::new("sh")
                 .arg("-c")
                 .arg(&final_command)
                 .current_dir(&command.directory)
-                .status()?;
-            
-            println!("Command exited with status: {}", output.code().unwrap_or(-1));
+                .output()?;
+
+            // Print the output
+            if !output.stdout.is_empty() {
+                println!("{}", String::from_utf8_lossy(&output.stdout));
+            }
+            if !output.stderr.is_empty() {
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            }
+
+            println!("{}: {}", 
+                "Command completed".green().bold(),
+                output.status.to_string().yellow()
+            );
         }
         Commands::ShellInit { shell } => {
             let script_path = crate::shell::hooks::init_shell(shell)?;

@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use rusqlite::Connection;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json;
 
 use super::models::Command;
@@ -25,7 +25,6 @@ impl Database {
                 command TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 directory TEXT NOT NULL,
-                exit_code INTEGER,
                 tags TEXT NOT NULL DEFAULT '',
                 parameters TEXT NOT NULL DEFAULT '[]'
             )",
@@ -71,13 +70,12 @@ impl Database {
         
         // Insert the command
         tx.execute(
-            "INSERT INTO commands (command, timestamp, directory, exit_code, tags, parameters)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO commands (command, timestamp, directory, tags, parameters)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             (
                 &command.command,
                 &command.timestamp.to_rfc3339(),
                 &command.directory,
-                &command.exit_code,
                 &command.tags.join(","),
                 &serde_json::to_string(&command.parameters)?,
             ),
@@ -164,7 +162,7 @@ impl Database {
 
     pub fn search_commands(&self, query: &str, limit: usize) -> Result<Vec<Command>> {
         let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+            "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
              FROM commands c
              WHERE c.command LIKE '%' || ?1 || '%'
              ORDER BY c.timestamp DESC
@@ -182,14 +180,12 @@ impl Database {
                 timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
                     .with_timezone(&Utc),
                 directory: row.get(3)?,
-                exit_code: row.get(4)?,
-                tags: row.get::<_, String>(5)?
+                tags: row.get::<_, String>(4)?
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
                     .collect(),
-                parameters: serde_json::from_str(&row.get::<_, String>(6)?)
-                    .map_err(|e| anyhow!("Failed to parse parameters: {}", e))?,
+                parameters: serde_json::from_str(&row.get::<_, String>(5)?)?,
             });
         }
 
@@ -198,7 +194,7 @@ impl Database {
 
     pub fn search_by_tag(&self, tag: &str, limit: usize) -> Result<Vec<Command>> {
         let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+            "SELECT DISTINCT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
              FROM commands c
              JOIN command_tags ct ON ct.command_id = c.id
              JOIN tags t ON t.id = ct.tag_id
@@ -218,14 +214,12 @@ impl Database {
                 timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
                     .with_timezone(&Utc),
                 directory: row.get(3)?,
-                exit_code: row.get(4)?,
-                tags: row.get::<_, String>(5)?
+                tags: row.get::<_, String>(4)?
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
                     .collect(),
-                parameters: serde_json::from_str(&row.get::<_, String>(6)?)
-                    .map_err(|e| anyhow!("Failed to parse parameters: {}", e))?,
+                parameters: serde_json::from_str(&row.get::<_, String>(5)?)?,
             });
         }
 
@@ -252,22 +246,22 @@ impl Database {
     pub fn list_commands(&self, limit: usize, ascending: bool) -> Result<Vec<Command>> {
         let query = if ascending {
             if limit == 0 {
-                "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+                "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
                  FROM commands c
                  ORDER BY c.timestamp ASC"
             } else {
-                "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+                "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
                  FROM commands c
                  ORDER BY c.timestamp ASC
                  LIMIT ?1"
             }
         } else {
             if limit == 0 {
-                "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+                "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
                  FROM commands c
                  ORDER BY c.timestamp DESC"
             } else {
-                "SELECT c.id, c.command, c.timestamp, c.directory, c.exit_code, c.tags, c.parameters 
+                "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
                  FROM commands c
                  ORDER BY c.timestamp DESC
                  LIMIT ?1"
@@ -291,14 +285,12 @@ impl Database {
                 timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
                     .with_timezone(&Utc),
                 directory: row.get(3)?,
-                exit_code: row.get(4)?,
-                tags: row.get::<_, String>(5)?
+                tags: row.get::<_, String>(4)?
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
                     .collect(),
-                parameters: serde_json::from_str(&row.get::<_, String>(6)?)
-                    .map_err(|e| anyhow!("Failed to parse parameters: {}", e))?,
+                parameters: serde_json::from_str(&row.get::<_, String>(5)?)?,
             });
         }
 
@@ -307,7 +299,7 @@ impl Database {
 
     pub fn get_command(&self, id: i64) -> Result<Option<Command>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, command, timestamp, directory, exit_code, tags, parameters 
+            "SELECT id, command, timestamp, directory, tags, parameters 
              FROM commands
              WHERE id = ?"
         )?;
@@ -318,15 +310,15 @@ impl Database {
             Ok(Some(Command {
                 id: Some(row.get(0)?),
                 command: row.get(1)?,
-                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?.with_timezone(&Utc),
+                timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
+                    .with_timezone(&Utc),
                 directory: row.get(3)?,
-                exit_code: row.get(4)?,
-                tags: row.get::<_, String>(5)?
+                tags: row.get::<_, String>(4)?
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
                     .collect(),
-                parameters: serde_json::from_str(&row.get::<_, String>(6)?)?,
+                parameters: serde_json::from_str(&row.get::<_, String>(5)?)?,
             }))
         } else {
             Ok(None)
@@ -346,15 +338,13 @@ impl Database {
              SET command = ?1, 
                  timestamp = ?2,
                  directory = ?3,
-                 exit_code = ?4,
-                 tags = ?5,
-                 parameters = ?6
-             WHERE id = ?7",
+                 tags = ?4,
+                 parameters = ?5
+             WHERE id = ?6",
             rusqlite::params![
                 command.command,
                 command.timestamp.to_rfc3339(),
                 command.directory,
-                command.exit_code,
                 command.tags.join(","),
                 serde_json::to_string(&command.parameters)?,
                 command.id.unwrap()

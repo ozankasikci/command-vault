@@ -2,6 +2,7 @@ use std::io::{self, Write};
 use anyhow::Result;
 use crate::db::models::Command;
 use dialoguer::{Input, theme::ColorfulTheme};
+use colored::*;
 
 pub fn execute_command(command: &Command) -> Result<()> {
     let mut final_command = command.command.clone();
@@ -39,9 +40,10 @@ pub fn execute_command(command: &Command) -> Result<()> {
         }
 
         // Show preview and confirm
-        println!("\nCommand to execute:");
-        println!("{}", final_command);
-        print!("\nExecute? [Y/n]: ");
+        println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
+        println!("{}: {}", "Directory".green().bold(), command.directory.cyan());
+        println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
+        print!("\n");
         io::stdout().flush()?;
 
         let mut response = String::new();

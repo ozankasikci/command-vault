@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Terminal,
 };
+use colored::*;
 
 use crate::db::{Command, Database};
 use crate::ui::AddCommandApp;
@@ -103,15 +104,15 @@ impl<'a> App<'a> {
                                         cmd.command.clone()
                                     };
 
-                                    println!("Command to execute: {}", final_command);
-                                    println!("Press Enter to continue or Ctrl+C to cancel...");
-                                    let mut input = String::new();
-                                    io::stdin().read_line(&mut input)?;
+                                    println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
+                                    println!("{}: {}", "Directory".green().bold(), cmd.directory.cyan());
+                                    println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
                                     
                                     // Execute the command
                                     let output = std::process::Command::new("sh")
                                         .arg("-c")
                                         .arg(&final_command)
+                                        .current_dir(&cmd.directory)
                                         .status();
 
                                     match output {
@@ -163,7 +164,6 @@ impl<'a> App<'a> {
                                     let mut add_app = AddCommandApp::new();
                                     add_app.set_command(cmd.command.clone());
                                     add_app.set_tags(cmd.tags.clone());
-                                    add_app.set_exit_code(cmd.exit_code);
                                     
                                     let result = add_app.run();
                                     
@@ -174,16 +174,15 @@ impl<'a> App<'a> {
                                     terminal.draw(|f| self.ui(f))?;
                                     
                                     match result {
-                                        Ok(Some((new_command, new_tags, new_exit_code))) => {
+                                        Ok(Some((new_command, new_tags, _))) => {
                                             // Update command
                                             let updated_cmd = Command {
                                                 id: cmd.id,
                                                 command: new_command,
                                                 timestamp: cmd.timestamp,
-                                                directory: cmd.directory,
-                                                exit_code: new_exit_code,
+                                                directory: cmd.directory.clone(),
                                                 tags: new_tags,
-                                                parameters: Vec::new(),
+                                                parameters: cmd.parameters.clone(),
                                             };
                                             
                                             if let Err(e) = self.db.update_command(&updated_cmd) {
@@ -305,7 +304,6 @@ impl<'a> App<'a> {
                 "",
                 "Command Details:",
                 "  - Commands show timestamp, command text, and tags",
-                "  - Red numbers in [brackets] indicate non-zero exit codes",
                 "  - Tags are shown in green with # prefix",
                 "  - Command IDs are shown in parentheses",
                 "",
@@ -361,15 +359,6 @@ impl<'a> App<'a> {
                     ),
                     Span::raw(&cmd.command),
                 ];
-
-                if let Some(code) = cmd.exit_code {
-                    if code != 0 {
-                        spans.push(Span::styled(
-                            format!(" [{}]", code),
-                            Style::default().fg(Color::Red)
-                        ));
-                    }
-                }
 
                 if !cmd.tags.is_empty() {
                     spans.push(Span::raw(" "));

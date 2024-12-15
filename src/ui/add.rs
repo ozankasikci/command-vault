@@ -28,8 +28,6 @@ pub struct AddCommandApp {
     tags: Vec<String>,
     /// Current tag being entered
     current_tag: String,
-    /// Exit code for the command
-    exit_code: Option<i32>,
     /// Current input mode
     input_mode: InputMode,
     /// Suggested tags
@@ -43,7 +41,6 @@ enum InputMode {
     #[default]
     Command,
     Tag,
-    ExitCode,
     Confirm,
     Help,
 }
@@ -171,7 +168,7 @@ impl AddCommandApp {
                                             self.tags.push(self.current_tag.clone());
                                             self.current_tag.clear();
                                         } else {
-                                            self.input_mode = InputMode::ExitCode;
+                                            self.input_mode = InputMode::Confirm;
                                         }
                                     }
                                     KeyCode::Char(c) => {
@@ -192,36 +189,13 @@ impl AddCommandApp {
                                     _ => {}
                                 }
                             }
-                            InputMode::ExitCode => {
-                                match key.code {
-                                    KeyCode::Enter => {
-                                        self.input_mode = InputMode::Confirm;
-                                    }
-                                    KeyCode::Char(c) if c.is_ascii_digit() => {
-                                        let digit = c.to_digit(10).unwrap() as i32;
-                                        self.exit_code = Some(self.exit_code.unwrap_or(0) * 10 + digit);
-                                    }
-                                    KeyCode::Backspace => {
-                                        if let Some(code) = self.exit_code {
-                                            self.exit_code = Some(code / 10);
-                                            if self.exit_code == Some(0) {
-                                                self.exit_code = None;
-                                            }
-                                        }
-                                    }
-                                    KeyCode::Esc => {
-                                        self.input_mode = InputMode::Tag;
-                                    }
-                                    _ => {}
-                                }
-                            }
                             InputMode::Confirm => {
                                 match key.code {
                                     KeyCode::Char('y') => {
                                         return Ok(Some((
                                             self.command.clone(),
                                             self.tags.clone(),
-                                            self.exit_code,
+                                            None,
                                         )));
                                     }
                                     KeyCode::Char('n') | KeyCode::Esc => {
@@ -247,10 +221,6 @@ impl AddCommandApp {
         self.tags = tags;
     }
 
-    pub fn set_exit_code(&mut self, exit_code: Option<i32>) {
-        self.exit_code = exit_code;
-    }
-
     fn ui(&self, f: &mut ratatui::Frame) {
         match self.input_mode {
             InputMode::Help => {
@@ -270,9 +240,6 @@ impl AddCommandApp {
                     "Tag Input Mode:",
                     "  Enter  - Add tag",
                     "  Tab    - Show tag suggestions",
-                    "",
-                    "Exit Code Input Mode:",
-                    "  Enter  - Continue to confirmation",
                     "",
                     "Confirmation Mode:",
                     "  y/Y    - Save command",
@@ -296,7 +263,6 @@ impl AddCommandApp {
                         Constraint::Length(3),  // Title
                         Constraint::Min(5),     // Command input
                         Constraint::Length(3),  // Tags input
-                        Constraint::Length(3),  // Exit code input
                         Constraint::Min(0),     // Message/Help
                     ])
                     .split(f.size());
@@ -340,33 +306,17 @@ impl AddCommandApp {
                     .block(Block::default().borders(Borders::ALL).title("Tags"));
                 f.render_widget(tags_input, chunks[2]);
 
-                // Exit code input
-                let exit_code_text = self.exit_code.map_or_else(String::new, |c| c.to_string());
-                let exit_code_input = Paragraph::new(format!(
-                    "{}\n{}",
-                    exit_code_text,
-                    if self.input_mode == InputMode::ExitCode { "│" } else { "" }
-                ))
-                .style(Style::default().fg(if self.input_mode == InputMode::ExitCode {
-                    Color::Yellow
-                } else {
-                    Color::Gray
-                }))
-                .block(Block::default().borders(Borders::ALL).title("Exit Code"));
-                f.render_widget(exit_code_input, chunks[3]);
-
                 // Help text or confirmation prompt
                 let help_text = match self.input_mode {
                     InputMode::Command => "Press ? for help",
                     InputMode::Tag => "Press ? for help",
-                    InputMode::ExitCode => "Press ? for help",
                     InputMode::Confirm => "Save command? (y/n)",
                     InputMode::Help => unreachable!(),
                 };
                 let help = Paragraph::new(help_text)
                     .style(Style::default().fg(Color::White))
                     .block(Block::default().borders(Borders::ALL));
-                f.render_widget(help, chunks[4]);
+                f.render_widget(help, chunks[3]);
             }
         }
     }

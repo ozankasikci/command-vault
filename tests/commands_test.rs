@@ -32,7 +32,6 @@ fn test_handle_command_list() -> Result<()> {
         command: "test command".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: Vec::new(),
     };
@@ -52,7 +51,6 @@ fn test_ls_with_limit() -> Result<()> {
             command: format!("command {}", i),
             timestamp: Utc::now(),
             directory: "/test".to_string(),
-            exit_code: None,
             tags: vec![],
             parameters: Vec::new(),
         };
@@ -78,7 +76,6 @@ fn test_ls_ordering() -> Result<()> {
             command: format!("command {}", i),
             timestamp: *timestamp,
             directory: "/test".to_string(),
-            exit_code: None,
             tags: vec![],
             parameters: Vec::new(),
         };
@@ -101,7 +98,6 @@ fn test_delete_command() -> Result<()> {
         command: "test command".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: Vec::new(),
     };
@@ -120,7 +116,6 @@ fn test_search_commands() -> Result<()> {
         command: "test command".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: Vec::new(),
     };
@@ -145,7 +140,6 @@ fn test_add_command_with_tags() -> Result<()> {
     let command = "test command".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: None, 
         tags: vec!["tag1".to_string(), "tag2".to_string()] 
     };
     
@@ -175,7 +169,6 @@ fn test_execute_command() -> Result<()> {
     let command = "echo test".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: Some(0), // Explicitly set exit code for test
         tags: vec![] 
     };
     
@@ -184,7 +177,6 @@ fn test_execute_command() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "echo test");
-    assert_eq!(commands[0].exit_code, Some(0));
 
     // Execute the command
     let exec_command = Commands::Exec { command_id: commands[0].id.unwrap() };
@@ -192,11 +184,9 @@ fn test_execute_command() -> Result<()> {
     
     // Verify command execution
     let saved = db.get_command(commands[0].id.unwrap())?.unwrap();
-    assert_eq!(saved.exit_code, Some(0)); // Should match what we set
     
     // Restore the original directory
     env::set_current_dir(original_dir)?;
-    
     Ok(())
 }
 
@@ -207,7 +197,6 @@ fn test_empty_command_validation() -> Result<()> {
     // Try adding an empty command
     let add_command = Commands::Add { 
         command: vec!["".to_string()], 
-        exit_code: None, 
         tags: vec![] 
     };
     
@@ -225,7 +214,6 @@ fn test_command_with_output() -> Result<()> {
     let command = "echo 'Hello, World!'".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: Some(0), // Explicitly set exit code for test
         tags: vec![] 
     };
     
@@ -234,7 +222,6 @@ fn test_command_with_output() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "echo 'Hello, World!'");
-    assert_eq!(commands[0].exit_code, Some(0)); // Should match what we set
     
     Ok(())
 }
@@ -247,7 +234,6 @@ fn test_command_with_stderr() -> Result<()> {
     let command = "ls nonexistent_directory".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: Some(1), // Explicitly set exit code for test
         tags: vec![] 
     };
     
@@ -256,7 +242,6 @@ fn test_command_with_stderr() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "ls nonexistent_directory");
-    assert_eq!(commands[0].exit_code, Some(1)); // Should match what we set
     
     Ok(())
 }
@@ -271,7 +256,6 @@ fn test_parameter_parsing() -> Result<()> {
         command: "echo @name".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![Parameter {
             name: "name".to_string(),
@@ -292,7 +276,6 @@ fn test_parameter_parsing() -> Result<()> {
         command: "echo @name:User_name".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![Parameter {
             name: "name".to_string(),
@@ -313,7 +296,6 @@ fn test_parameter_parsing() -> Result<()> {
         command: "echo @name:User_name=John".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![Parameter {
             name: "name".to_string(),
@@ -334,7 +316,6 @@ fn test_parameter_parsing() -> Result<()> {
         command: "echo @name:User_name=John @age:User_age=30".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![
             Parameter {
@@ -374,7 +355,6 @@ fn test_exec_command_with_parameters() -> Result<()> {
         command: "echo @name=John".to_string(),
         timestamp: Utc::now(),
         directory: test_dir.to_string_lossy().to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![Parameter {
             name: "name".to_string(),
@@ -425,7 +405,6 @@ fn test_parameter_validation() -> Result<()> {
         command: "echo @1name".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![],
     };
@@ -439,7 +418,6 @@ fn test_parameter_validation() -> Result<()> {
         command: "echo @name!".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
-        exit_code: None,
         tags: vec![],
         parameters: vec![],
     };
