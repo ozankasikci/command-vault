@@ -1,3 +1,9 @@
+//! Database module for command-vault
+//! 
+//! This module provides SQLite-based storage for commands, tags, and parameters.
+//! It handles all database operations including CRUD operations for commands,
+//! tag management, and search functionality.
+
 use anyhow::{Result, anyhow};
 use rusqlite::Connection;
 use chrono::Utc;
@@ -5,11 +11,36 @@ use serde_json;
 
 use super::models::Command;
 
+/// The main database interface for command-vault.
+/// 
+/// Handles all database operations including:
+/// - Command storage and retrieval
+/// - Tag management
+/// - Search functionality
+/// 
+/// # Example
+/// ```no_run
+/// use anyhow::Result;
+/// use command_vault::db::Database;
+/// 
+/// fn main() -> Result<()> {
+///     let db = Database::new("commands.db")?;
+///     db.init()?;
+///     Ok(())
+/// }
+/// ```
 pub struct Database {
     conn: Connection,
 }
 
 impl Database {
+    /// Creates a new database connection.
+    /// 
+    /// # Arguments
+    /// * `path` - Path to the SQLite database file
+    /// 
+    /// # Returns
+    /// * `Result<Database>` - A new database instance
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
         let db = Database { conn };
@@ -17,7 +48,13 @@ impl Database {
         Ok(db)
     }
 
-    fn init(&self) -> Result<()> {
+    /// Initializes the database schema.
+    /// 
+    /// Creates the following tables if they don't exist:
+    /// - commands: Stores command information
+    /// - tags: Stores tag information
+    /// - command_tags: Links commands to tags
+    pub fn init(&self) -> Result<()> {
         // Create commands table
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS commands (
@@ -65,6 +102,13 @@ impl Database {
         Ok(())
     }
 
+    /// Adds a new command to the database.
+    /// 
+    /// # Arguments
+    /// * `command` - The command to add
+    /// 
+    /// # Returns
+    /// * `Result<i64>` - The ID of the newly added command
     pub fn add_command(&mut self, command: &Command) -> Result<i64> {
         let tx = self.conn.transaction()?;
         
@@ -108,6 +152,14 @@ impl Database {
         Ok(command_id)
     }
 
+    /// Adds tags to an existing command.
+    /// 
+    /// # Arguments
+    /// * `command_id` - The ID of the command to add tags to
+    /// * `tags` - The tags to add
+    /// 
+    /// # Returns
+    /// * `Result<()>` - Success or failure
     pub fn add_tags_to_command(&mut self, command_id: i64, tags: &[String]) -> Result<()> {
         let tx = self.conn.transaction()?;
         
@@ -146,6 +198,14 @@ impl Database {
         Ok(())
     }
 
+    /// Removes a tag from a command.
+    /// 
+    /// # Arguments
+    /// * `command_id` - The ID of the command to remove the tag from
+    /// * `tag_name` - The name of the tag to remove
+    /// 
+    /// # Returns
+    /// * `Result<()>` - Success or failure
     pub fn remove_tag_from_command(&mut self, command_id: i64, tag_name: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         
@@ -160,6 +220,14 @@ impl Database {
         Ok(())
     }
 
+    /// Searches for commands containing a given query string.
+    /// 
+    /// # Arguments
+    /// * `query` - The query string to search for
+    /// * `limit` - The maximum number of results to return
+    /// 
+    /// # Returns
+    /// * `Result<Vec<Command>>` - A list of matching commands
     pub fn search_commands(&self, query: &str, limit: usize) -> Result<Vec<Command>> {
         let mut stmt = self.conn.prepare(
             "SELECT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
@@ -192,6 +260,14 @@ impl Database {
         Ok(commands)
     }
 
+    /// Searches for commands with a given tag.
+    /// 
+    /// # Arguments
+    /// * `tag` - The tag to search for
+    /// * `limit` - The maximum number of results to return
+    /// 
+    /// # Returns
+    /// * `Result<Vec<Command>>` - A list of matching commands
     pub fn search_by_tag(&self, tag: &str, limit: usize) -> Result<Vec<Command>> {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT c.id, c.command, c.timestamp, c.directory, c.tags, c.parameters 
@@ -226,6 +302,10 @@ impl Database {
         Ok(commands)
     }
 
+    /// Lists all tags in the database.
+    /// 
+    /// # Returns
+    /// * `Result<Vec<(String, i64)>>` - A list of tags with their respective counts
     pub fn list_tags(&self) -> Result<Vec<(String, i64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT t.name, COUNT(ct.command_id) as count
@@ -243,6 +323,14 @@ impl Database {
         Ok(tags)
     }
 
+    /// Lists all commands in the database.
+    /// 
+    /// # Arguments
+    /// * `limit` - The maximum number of results to return
+    /// * `ascending` - Whether to return results in ascending order
+    /// 
+    /// # Returns
+    /// * `Result<Vec<Command>>` - A list of commands
     pub fn list_commands(&self, limit: usize, ascending: bool) -> Result<Vec<Command>> {
         let query = if ascending {
             if limit == 0 {
@@ -297,6 +385,13 @@ impl Database {
         Ok(commands)
     }
 
+    /// Retrieves a command by its ID.
+    /// 
+    /// # Arguments
+    /// * `id` - The ID of the command to retrieve
+    /// 
+    /// # Returns
+    /// * `Result<Option<Command>>` - The command if found, or None if not found
     pub fn get_command(&self, id: i64) -> Result<Option<Command>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, command, timestamp, directory, tags, parameters 
@@ -325,6 +420,13 @@ impl Database {
         }
     }
 
+    /// Updates an existing command.
+    /// 
+    /// # Arguments
+    /// * `command` - The updated command
+    /// 
+    /// # Returns
+    /// * `Result<()>` - Success or failure
     pub fn update_command(&mut self, command: &Command) -> Result<()> {
         if command.id.is_none() {
             return Err(anyhow!("Cannot update command without id"));
@@ -382,6 +484,13 @@ impl Database {
         Ok(())
     }
 
+    /// Deletes a command by its ID.
+    /// 
+    /// # Arguments
+    /// * `command_id` - The ID of the command to delete
+    /// 
+    /// # Returns
+    /// * `Result<()>` - Success or failure
     pub fn delete_command(&mut self, command_id: i64) -> Result<()> {
         // First delete from command_tags
         self.conn.execute(

@@ -6,6 +6,14 @@ authors = ["Ozan Kaşikci"]
 license = "MIT"
 description = "An advanced command history manager with tagging and search capabilities"
 repository = "https://github.com/ozan/command-vault"
+documentation = "https://docs.rs/command-vault"
+readme = "README.md"
+keywords = ["cli", "command", "history", "search", "tag"]
+categories = ["command-line-utilities", "development-tools"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 anyhow = "1.0"
