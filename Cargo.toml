@@ -8,7 +8,7 @@ description = "An advanced command history manager with tagging and search capab
 repository = "https://github.com/ozan/command-vault"
 documentation = "https://docs.rs/command-vault"
 readme = "README.md"
-keywords = ["cli", "command", "history", "search", "tag"]
+keywords = ["cli", "command", "history", "search", "tag", "commandline", "utilities" ]
 categories = ["command-line-utilities", "development-tools"]
 
 [package.metadata.docs.rs]
