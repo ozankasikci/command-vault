@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "command-vault")]
-#[command(about = "An advanced command history manager", long_about = None)]
+#[command(name = "command-vault", author, version, about = "An advanced command history manager", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -21,7 +20,7 @@ pub enum Commands {
         exit_code: Option<i32>,
 
         /// Tags to add to the command
-        #[arg(short, long)]
+        #[arg(long)]
         tags: Vec<String>,
     },
     /// Search through command history
