@@ -1,6 +1,6 @@
 # Command Vault
 
-Command Vault is a command manager store, and execute your complex commands. It provides a user-friendly interface to search, list, and delete commands, as well as tag commands for better organization.
+Command Vault is a command manager for storing, and executing your complex commands. It provides a user-friendly interface to search, list, and delete commands, as well as tag commands for better organization.
 
 ## Table of Contents
 - [Features](#features)
