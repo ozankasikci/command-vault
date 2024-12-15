@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use chrono::Local;
+use chrono::{Local, Utc};
 use std::io::{self, Write, Stdout};
 use crossterm::{
     execute,
@@ -98,37 +98,14 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 return Err(anyhow!("Cannot add empty command"));
             }
 
-            let (final_exit_code, _output) = if cfg!(test) {
-                // In test mode, don't actually execute the command
-                // Use the provided exit code or default to 0
-                (exit_code.unwrap_or(0), String::new())
-            } else {
-                // Execute the command
-                let output = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(&command)
-                    .output()?;
-                
-                // Print command output
-                if !output.stdout.is_empty() {
-                    io::stdout().write_all(&output.stdout)?;
-                }
-                if !output.stderr.is_empty() {
-                    io::stderr().write_all(&output.stderr)?;
-                }
-                
-                (exit_code.unwrap_or_else(|| output.status.code().unwrap_or(0)), 
-                 String::from_utf8_lossy(&output.stdout).into_owned())
-            };
-
             let directory = std::env::current_dir()?.canonicalize()?.to_string_lossy().into_owned();
-            let timestamp = chrono::Utc::now();
+            let timestamp = Local::now().with_timezone(&Utc);
             let cmd = Command {
                 id: None,
                 command,
                 timestamp,
                 directory,
-                exit_code: Some(final_exit_code),
+                exit_code: exit_code,
                 tags,
             };
             let id = db.add_command(&cmd)?;
