@@ -82,7 +82,7 @@ command-vault ls
 # Delete a command
 command-vault delete <command-id>
 ```
-![Listing Commands](demo/delete-command2.gif)
+![Listing Commands](demo/delete-command.gif)
 
 ```bash
 # Show command details
