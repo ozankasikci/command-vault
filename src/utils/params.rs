@@ -1,12 +1,12 @@
 use crate::db::models::Parameter;
 use regex::Regex;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use std::io::Write;
 use colored::*;
 use crossterm::{
     cursor::MoveTo,
     terminal::{Clear, ClearType},
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     ExecutableCommand, QueueableCommand,
     style::Print,
 };
@@ -134,23 +134,30 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
 
             // Handle input
             if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Enter => break,
-                    KeyCode::Char(c) => {
+                match (key.code, key.modifiers) {
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                        // Clean up terminal
+                        crossterm::terminal::disable_raw_mode()?;
+                        stdout.execute(Clear(ClearType::All))?
+                              .execute(MoveTo(0, 0))?;
+                        return Err(anyhow!("Operation cancelled by user"));
+                    },
+                    (KeyCode::Enter, _) => break,
+                    (KeyCode::Char(c), _) => {
                         input.insert(cursor_pos, c);
                         cursor_pos += 1;
                     }
-                    KeyCode::Backspace if cursor_pos > 0 => {
+                    (KeyCode::Backspace, _) if cursor_pos > 0 => {
                         input.remove(cursor_pos - 1);
                         cursor_pos -= 1;
                     }
-                    KeyCode::Left if cursor_pos > 0 => {
+                    (KeyCode::Left, _) if cursor_pos > 0 => {
                         cursor_pos -= 1;
                     }
-                    KeyCode::Right if cursor_pos < input.len() => {
+                    (KeyCode::Right, _) if cursor_pos < input.len() => {
                         cursor_pos += 1;
                     }
-                    KeyCode::Esc => {
+                    (KeyCode::Esc, _) => {
                         input.clear();
                         break;
                     }

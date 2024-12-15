@@ -159,6 +159,10 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             match app.run() {
                 Ok(_) => (),
                 Err(e) => {
+                    if e.to_string() == "Operation cancelled by user" {
+                        println!("\n{}", "Operation cancelled.".yellow());
+                        return Ok(());
+                    }
                     eprintln!("Failed to start TUI mode: {}", e);
                     print_commands(&commands)?;
                 }
@@ -183,6 +187,10 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             match app.run() {
                 Ok(_) => (),
                 Err(e) => {
+                    if e.to_string() == "Operation cancelled by user" {
+                        println!("\n{}", "Operation cancelled.".yellow());
+                        return Ok(());
+                    }
                     eprintln!("Failed to start TUI mode: {}", e);
                     print_commands(&commands)?;
                 }
@@ -236,7 +244,16 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             
             // If command has parameters, substitute them with user input
             let final_command = if !command.parameters.is_empty() {
-                crate::utils::params::substitute_parameters(&command.command, &command.parameters)?
+                match crate::utils::params::substitute_parameters(&command.command, &command.parameters) {
+                    Ok(cmd) => cmd,
+                    Err(e) => {
+                        if e.to_string() == "Operation cancelled by user" {
+                            println!("\n{}", "Command execution cancelled.".yellow());
+                            return Ok(());
+                        }
+                        return Err(e);
+                    }
+                }
             } else {
                 command.command.clone()
             };
