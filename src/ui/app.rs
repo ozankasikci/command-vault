@@ -106,10 +106,6 @@ impl<'a> App<'a> {
                                         cmd.command.clone()
                                     };
 
-                                    println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
-                                    println!("{}: {}", "Directory".green().bold(), cmd.directory.cyan());
-                                    println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
-                                    
                                     // Execute the command
                                     let output = std::process::Command::new("sh")
                                         .arg("-c")
@@ -121,16 +117,13 @@ impl<'a> App<'a> {
 
                                     match output {
                                         Ok(output) => {
+                                            // Only print the actual command output
                                             if !output.stdout.is_empty() {
-                                                println!("{}", String::from_utf8_lossy(&output.stdout));
+                                                print!("{}", String::from_utf8_lossy(&output.stdout));
                                             }
                                             if !output.stderr.is_empty() {
-                                                println!("{}", String::from_utf8_lossy(&output.stderr));
+                                                eprint!("{}", String::from_utf8_lossy(&output.stderr));
                                             }
-                                            println!("{}: {}", 
-                                                "Command completed".green().bold(),
-                                                output.status.to_string().yellow()
-                                            );
                                             return Ok(());
                                         }
                                         Err(e) => {

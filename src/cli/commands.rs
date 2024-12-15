@@ -141,15 +141,15 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 parameters,
             };
             let id = db.add_command(&cmd)?;
-            println!("Command added to history with ID: {}", id);
+            print!("Command added to history with ID: {}", id);
             
             // If command has parameters, show them
             if !cmd.parameters.is_empty() {
-                println!("\nDetected parameters:");
+                print!("\nDetected parameters:");
                 for param in &cmd.parameters {
                     let desc = param.description.as_deref().unwrap_or("No description");
                     let default = param.default_value.as_deref().unwrap_or("None");
-                    println!("  - {}: {} (default: {})", param.name, desc, default);
+                    print!("  - {}: {} (default: {})", param.name, desc, default);
                 }
             }
         }
@@ -160,7 +160,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 Ok(_) => (),
                 Err(e) => {
                     if e.to_string() == "Operation cancelled by user" {
-                        println!("\n{}", "Operation cancelled.".yellow());
+                        print!("\n{}", "Operation cancelled.".yellow());
                         return Ok(());
                     }
                     eprintln!("Failed to start TUI mode: {}", e);
@@ -171,14 +171,14 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
         Commands::Ls { limit, asc } => {
             let commands = db.list_commands(limit, asc)?;
             if commands.is_empty() {
-                println!("No commands found.");
+                print!("No commands found.");
                 return Ok(());
             }
 
             // Check if TUI should be disabled (useful for testing or non-interactive environments)
             if std::env::var("COMMAND_VAULT_NO_TUI").is_ok() {
                 for cmd in commands {
-                    println!("{}: {} ({})", cmd.id.unwrap_or(0), cmd.command, cmd.directory);
+                    print!("{}: {} ({})", cmd.id.unwrap_or(0), cmd.command, cmd.directory);
                 }
                 return Ok(());
             }
@@ -188,7 +188,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 Ok(_) => (),
                 Err(e) => {
                     if e.to_string() == "Operation cancelled by user" {
-                        println!("\n{}", "Operation cancelled.".yellow());
+                        print!("\n{}", "Operation cancelled.".yellow());
                         return Ok(());
                     }
                     eprintln!("Failed to start TUI mode: {}", e);
@@ -199,13 +199,13 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
         Commands::Tag { action } => match action {
             TagCommands::Add { command_id, tags } => {
                 match db.add_tags_to_command(command_id, &tags) {
-                    Ok(_) => println!("Tags added successfully"),
+                    Ok(_) => print!("Tags added successfully"),
                     Err(e) => eprintln!("Failed to add tags: {}", e),
                 }
             }
             TagCommands::Remove { command_id, tag } => {
                 match db.remove_tag_from_command(command_id, &tag) {
-                    Ok(_) => println!("Tag removed successfully"),
+                    Ok(_) => print!("Tag removed successfully"),
                     Err(e) => eprintln!("Failed to remove tag: {}", e),
                 }
             }
@@ -213,14 +213,14 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 match db.list_tags() {
                     Ok(tags) => {
                         if tags.is_empty() {
-                            println!("No tags found");
+                            print!("No tags found");
                             return Ok(());
                         }
                         
-                        println!("\nTags and their usage:");
-                        println!("─────────────────────────────────────────────");
+                        print!("\nTags and their usage:");
+                        print!("─────────────────────────────────────────────");
                         for (tag, count) in tags {
-                            println!("{}: {} command{}", tag, count, if count == 1 { "" } else { "s" });
+                            print!("{}: {} command{}", tag, count, if count == 1 { "" } else { "s" });
                         }
                     }
                     Err(e) => eprintln!("Failed to list tags: {}", e),
@@ -248,7 +248,6 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                     Ok(cmd) => cmd,
                     Err(e) => {
                         if e.to_string() == "Operation cancelled by user" {
-                            println!("\n{}", "Command execution cancelled.".yellow());
                             return Ok(());
                         }
                         return Err(e);
@@ -257,12 +256,6 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             } else {
                 command.command.clone()
             };
-            
-            println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
-            println!("{}: {}", "Directory".green().bold(), command.directory.cyan());
-            
-            // Re-enable colored output before executing command
-            colored::control::set_override(true);
             
             // Execute the command
             let output = std::process::Command::new("sh")
@@ -273,28 +266,20 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 .env("RUST_BACKTRACE", "1")  // Also enable colored backtraces
                 .output()?;
 
-            // Re-enable colored output after command execution
-            colored::control::set_override(true);
-
-            // Print the output
+            // Only print the actual command output
             if !output.stdout.is_empty() {
-                println!("{}", String::from_utf8_lossy(&output.stdout));
+                print!("{}", String::from_utf8_lossy(&output.stdout));
             }
             if !output.stderr.is_empty() {
-                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
             }
-
-            println!("{}: {}", 
-                "Command completed".green().bold(),
-                output.status.to_string().yellow()
-            );
         }
         Commands::ShellInit { shell } => {
             let script_path = crate::shell::hooks::init_shell(shell)?;
             if !script_path.exists() {
                 return Err(anyhow!("Shell integration script not found at: {}", script_path.display()));
             }
-            println!("{}", script_path.display());
+            print!("{}", script_path.display());
             return Ok(());
         },
     }
