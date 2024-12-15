@@ -1,2 +1,1 @@
-mod hooks;
-
+pub mod hooks;

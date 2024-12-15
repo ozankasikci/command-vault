@@ -12,6 +12,8 @@ An advanced command history manager that helps you track and search your shell c
 - 🐚 Cross-shell support (Bash, Zsh)
 - 💾 Local SQLite database for fast searching
 - 🔄 Automatic command logging
+- 📱 Terminal User Interface (TUI) for interactive usage
+- 🔐 Safe command execution with validation
 
 ## Installation
 
@@ -20,117 +22,72 @@ An advanced command history manager that helps you track and search your shell c
    cargo build --release
    ```
 
-2. Install the binary:
+2. Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`):
    ```bash
-   cargo install --path .
+   source "$(command-vault shell-init)"
    ```
-
-## Shell Integration
-
-### Zsh
-
-Add this to your `~/.zshrc`:
-```bash
-source /path/to/command-vault/shell/zsh-integration.zsh
-```
-
-### Bash
-
-Add this to your `~/.bashrc`:
-```bash
-source /path/to/command-vault/shell/bash-integration.sh
-```
 
 ## Usage
 
-### Adding Commands
-```bash
-# Add a simple command
-command-vault add "your command here"
+Command Vault can be used both from the command line and through its Terminal User Interface (TUI).
 
+### Command Line Interface
+
+```bash
 # Add a command with tags
-command-vault add "git push origin main" -t important -t git
+command-vault add --tags git,deploy git push origin main
 
-# Add a command with exit code
-command-vault add "make build" --exit-code 1
-```
+# Search commands
+command-vault search "git push"
 
-### Listing Commands
-```bash
-# List recent commands (newest first)
+# List recent commands
 command-vault ls
 
-# List oldest commands first
-command-vault ls --asc
+# Delete a command
+command-vault delete <command-id>
 
-# List only the last 5 commands
-command-vault ls --limit 5
-
-# List the first 5 commands
-command-vault ls --asc -l 5
+# Show command details
+command-vault show <command-id>
 ```
 
-### Searching Commands
+### Terminal User Interface (TUI)
+
+Launch the TUI mode:
 ```bash
-# Basic search
-command-vault search "git"
-
-# Limit search results
-command-vault search "docker" --limit 5
+command-vault tui
 ```
 
-### Managing Tags
-```bash
-# Add tags to an existing command
-command-vault tag add 123 important git
+In TUI mode, you can:
+- Browse through your command history
+- Search commands with real-time filtering
+- Add new commands with tags
+- View command details including exit codes and timestamps
+- Delete commands
 
-# Remove a tag from a command
-command-vault tag remove 123 important
+## Project Structure
 
-# List all tags and their usage
-command-vault tag list
-
-# Search commands by tag
-command-vault tag search git
 ```
-
-## Command Output Format
-
-Commands are displayed with rich context:
+src/
+├── cli/        # Command-line interface implementation
+├── db/         # Database operations and models
+├── shell/      # Shell integration and hooks
+├── ui/         # Terminal User Interface components
+├── utils/      # Utility functions
+├── lib.rs      # Library interface
+└── main.rs     # Application entry point
 ```
-(123) [2024-12-12 04:41:03] git push origin main
-    Directory: /path/to/project
-    Tags: git, important
-```
-
-Each command entry shows:
-- Command ID in parentheses
-- Timestamp in local timezone
-- The actual command
-- Working directory
-- Exit code (if non-zero)
-- Associated tags (if any)
 
 ## Development
 
-### Prerequisites
-
-- Rust 1.70 or later
+Requirements:
+- Rust 1.70 or higher
 - SQLite 3.x
 
-### Building
-
+Run tests:
 ```bash
-# Development build
-cargo build
-
-# Release build
-cargo build --release
-
-# Run tests
 cargo test
 ```
 
 ## License
 
-Command Vault is released under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.

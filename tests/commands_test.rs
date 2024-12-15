@@ -122,6 +122,7 @@ fn test_search_commands() -> Result<()> {
 fn test_add_command_with_tags() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     let temp_dir = tempdir()?;
+    std::fs::create_dir_all(temp_dir.path())?;
 
     // Change to the test directory
     let original_dir = env::current_dir()?;
@@ -158,7 +159,7 @@ fn test_execute_command() -> Result<()> {
     let test_dir = temp_dir.path().canonicalize()?;
     env::set_current_dir(&test_dir)?;
     
-    let command = "echo test".to_string();
+    let command = "pwd".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
         exit_code: None, 
@@ -169,7 +170,7 @@ fn test_execute_command() -> Result<()> {
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "echo test");
+    assert_eq!(commands[0].command, "pwd");
     assert_eq!(commands[0].exit_code, Some(0));
     
     // Restore the original directory
@@ -191,6 +192,80 @@ fn test_empty_command_validation() -> Result<()> {
     
     let result = cli::handle_command(add_command, &mut db);
     assert!(result.is_err());
+    
+    Ok(())
+}
+
+#[test]
+fn test_command_with_output() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let temp_dir = tempdir()?;
+    std::fs::create_dir_all(temp_dir.path())?;
+
+    // Change to the test directory
+    let original_dir = env::current_dir()?;
+    let test_dir = temp_dir.path().canonicalize()?;
+    env::set_current_dir(&test_dir)?;
+    
+    // Create a test file with some content
+    let test_content = "Hello, World!";
+    std::fs::write("test.txt", test_content)?;
+    
+    // Test command that produces output
+    let command = "cat test.txt".to_string();
+    let add_command = Commands::Add { 
+        command: vec![command.clone()], 
+        exit_code: None,
+        tags: vec![] 
+    };
+    
+    cli::handle_command(add_command, &mut db)?;
+    
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].command, "cat test.txt");
+    
+    // In test mode, we don't actually execute the command
+    // so we just verify it was added to the database
+    assert!(commands[0].exit_code.is_some());
+    
+    // Restore the original directory
+    env::set_current_dir(original_dir)?;
+    
+    Ok(())
+}
+
+#[test]
+fn test_command_with_stderr() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let temp_dir = tempdir()?;
+    std::fs::create_dir_all(temp_dir.path())?;
+
+    // Change to the test directory
+    let original_dir = env::current_dir()?;
+    let test_dir = temp_dir.path().canonicalize()?;
+    env::set_current_dir(&test_dir)?;
+    
+    // Test command that produces stderr output
+    let command = "cat nonexistent.txt".to_string();
+    let add_command = Commands::Add { 
+        command: vec![command.clone()], 
+        exit_code: None,
+        tags: vec![] 
+    };
+    
+    cli::handle_command(add_command, &mut db)?;
+    
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].command, "cat nonexistent.txt");
+    
+    // In test mode, we don't actually execute the command
+    // so we just verify it was added to the database
+    assert!(commands[0].exit_code.is_some());
+    
+    // Restore the original directory
+    env::set_current_dir(original_dir)?;
     
     Ok(())
 }

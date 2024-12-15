@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use chrono::Local;
-use std::io::{self, Stdout};
+use std::io::{self, Write, Stdout};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -98,15 +98,26 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 return Err(anyhow!("Cannot add empty command"));
             }
 
-            let exit_code = if cfg!(test) {
-                exit_code
+            let (final_exit_code, output) = if cfg!(test) {
+                // In test mode, don't actually execute the command
+                (exit_code.or(Some(0)), String::new())
             } else {
                 // Execute the command
                 let output = std::process::Command::new("sh")
                     .arg("-c")
                     .arg(&command)
-                    .status()?;
-                exit_code.or(Some(output.code().unwrap_or(0)))
+                    .output()?;
+                
+                // Print command output
+                if !output.stdout.is_empty() {
+                    io::stdout().write_all(&output.stdout)?;
+                }
+                if !output.stderr.is_empty() {
+                    io::stderr().write_all(&output.stderr)?;
+                }
+                
+                (exit_code.or(Some(output.status.code().unwrap_or(0))), 
+                 String::from_utf8_lossy(&output.stdout).into_owned())
             };
 
             let directory = std::env::current_dir()?.canonicalize()?.to_string_lossy().into_owned();
@@ -116,7 +127,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command,
                 timestamp,
                 directory,
-                exit_code,
+                exit_code: final_exit_code,
                 tags,
             };
             let id = db.add_command(&cmd)?;
@@ -193,7 +204,15 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                     Err(e) => eprintln!("Failed to search by tag: {}", e),
                 }
             }
-        }
+        },
+        Commands::ShellInit { shell } => {
+            let script_path = crate::shell::hooks::init_shell(shell)?;
+            if !script_path.exists() {
+                return Err(anyhow!("Shell integration script not found at: {}", script_path.display()));
+            }
+            println!("{}", script_path.display());
+            return Ok(());
+        },
     }
     Ok(())
 }

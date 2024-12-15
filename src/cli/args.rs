@@ -49,6 +49,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: TagCommands,
     },
+    /// Initialize shell integration
+    ShellInit {
+        /// Shell to initialize (defaults to current shell)
+        #[arg(short, long)]
+        shell: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
