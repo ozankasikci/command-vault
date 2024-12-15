@@ -73,7 +73,7 @@ command-vault search "git push"
 # List recent commands
 command-vault ls
 ```
-![Listing Commands](demo/ls-command.gif)
+![Listing Commands](demo/ls-command2.gif)
 
 ```bash
 # Delete a command
