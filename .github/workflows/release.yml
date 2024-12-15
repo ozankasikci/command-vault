@@ -51,6 +51,8 @@ jobs:
   build-release:
     needs: create-release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
