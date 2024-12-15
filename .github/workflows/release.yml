@@ -18,6 +18,7 @@ jobs:
       contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,15 +85,19 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare asset for upload
+      - name: Prepare asset for upload (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ../../../${{ matrix.asset_name }}.zip
+
+      - name: Prepare asset for upload (Unix)
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a ../../../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
-          else
-            tar czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-          fi
+          tar czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
