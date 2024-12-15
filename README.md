@@ -77,20 +77,6 @@ command-vault delete <command-id>
 command-vault show <command-id>
 ```
 
-### Terminal User Interface (TUI)
-
-Launch the TUI mode:
-```bash
-command-vault tui
-```
-
-In TUI mode, you can:
-- Browse through your command history
-- Search commands with real-time filtering
-- Add new commands with tags
-- View command details including exit codes and timestamps
-- Delete commands
-
 ## Development
 
 Requirements:
