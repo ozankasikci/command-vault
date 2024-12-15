@@ -17,38 +17,40 @@ An advanced command history manager that helps you track and search your shell c
 
 ## Usage
 
-### Adding Commands
+### Add Commands
 ```bash
 # Add a command with tags
 command-vault add --tags git,deploy git push origin main
+command-vault add echo "Hello, world!"
 ```
-![Adding Command](demo/add-command3.gif)
+![Add Command](demo/add-command3.gif)
 
-### Searching Command History
+### Search Command History
 ```bash
 # Search commands
 command-vault search "git push"
 ```
 ![Search Commands](demo/search-command.gif)
 
-### Listing Recent Commands
+### List Commands
 ```bash
 # List recent commands
 command-vault ls
 ```
-![Listing Commands](demo/ls-command2.gif)
+![List Commands](demo/ls-command2.gif)
 
-### Deleting Commands
+### Delete Commands
 ```bash
 # Delete a command
 command-vault delete <command-id>
 ```
-![Deletion Commands](demo/delete-command.gif)
+![Delete Commands](demo/delete-command.gif)
 
-### Managing Tags
+### Tag Commands
 ```bash
 # Show tag command
 command-vault tag # Show tag related commands
+command-vault tag list # List tag related commands
 ```
 ![Tag Commands](demo/tag-command.gif)
 
