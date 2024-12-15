@@ -19,6 +19,12 @@ thiserror = "1.0"
 ratatui = "0.24.0"
 crossterm = "0.27.0"
 atty = "0.2"
+dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
+regex = "1.10.2"
+
+[[bin]]
+name = "cv"
+path = "src/main.rs"
 
 [dev-dependencies]
 tempfile = "3.8"

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "command-vault", author, version, about = "An advanced command history manager", long_about = None)]
+#[command(author, version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -9,19 +9,28 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Add a new command to history
+    /// Add a command to history
+    ///
+    /// Parameters can be specified using @name:description=default syntax
+    /// Examples:
+    ///   - Basic parameter: @filename
+    ///   - With description: @filename:Name of file to create
+    ///   - With default: @filename:Name of file to create=test.txt
     Add {
-        /// The command to add
-        #[arg(required = true, trailing_var_arg = true)]
+        /// Command to add
         command: Vec<String>,
-        
-        /// Optional exit code of the command
-        #[arg(long)]
+        /// Exit code of the command
+        #[arg(short, long)]
         exit_code: Option<i32>,
-
         /// Tags to add to the command
-        #[arg(long)]
+        #[arg(short, long)]
         tags: Vec<String>,
+    },
+    
+    /// Execute a command from history
+    Exec {
+        /// Command ID to execute
+        command_id: i64,
     },
     /// Search through command history
     Search {
@@ -35,8 +44,8 @@ pub enum Commands {
     },
     /// List all commands in chronological order
     Ls {
-        /// Maximum number of results to show
-        #[arg(short, long, default_value = "10")]
+        /// Maximum number of results to show. Use 0 to show all commands.
+        #[arg(short, long, default_value = "50")]
         limit: usize,
         
         /// Sort in ascending order (oldest first)

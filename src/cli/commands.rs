@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use chrono::{Local, Utc};
-use std::io::{self, Write, Stdout};
+use std::io::{self, Stdout};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -16,13 +16,42 @@ use ratatui::{
 
 use crate::db::{Command, Database};
 use crate::ui::App;
+use crate::utils::params::parse_parameters;
 use super::args::{Commands, TagCommands};
 
 fn print_commands(commands: &[Command]) -> Result<()> {
-    let mut terminal = setup_terminal()?;
-    let res = print_commands_ui(&mut terminal, commands);
-    restore_terminal(&mut terminal)?;
-    res
+    let terminal_result = setup_terminal();
+    
+    match terminal_result {
+        Ok(mut terminal) => {
+            let res = print_commands_ui(&mut terminal, commands);
+            restore_terminal(&mut terminal)?;
+            res
+        }
+        Err(_) => {
+            // Fallback to simple text output
+            println!("Command History:");
+            println!("─────────────────────────────────────────────");
+            for cmd in commands {
+                let local_time = cmd.timestamp.with_timezone(&Local);
+                println!("{} │ {}", local_time.format("%Y-%m-%d %H:%M:%S"), cmd.command);
+                if !cmd.tags.is_empty() {
+                    println!("    Tags: {}", cmd.tags.join(", "));
+                }
+                if !cmd.parameters.is_empty() {
+                    println!("    Parameters:");
+                    for param in &cmd.parameters {
+                        let desc = param.description.as_deref().unwrap_or("No description");
+                        let default = param.default_value.as_deref().unwrap_or("None");
+                        println!("      - {}: {} (default: {})", param.name, desc, default);
+                    }
+                }
+                println!("    Directory: {}", cmd.directory);
+                println!();
+            }
+            Ok(())
+        }
+    }
 }
 
 fn print_commands_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, commands: &[Command]) -> Result<()> {
@@ -92,24 +121,41 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
 pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
     match command {
         Commands::Add { command, exit_code, tags } => {
-            let command = command.join(" ");
+            // Just join the arguments literally without any shell expansion
+            let command_str = command.join(" ");
+            
             // Don't allow empty commands
-            if command.trim().is_empty() {
+            if command_str.trim().is_empty() {
                 return Err(anyhow!("Cannot add empty command"));
             }
 
             let directory = std::env::current_dir()?.canonicalize()?.to_string_lossy().into_owned();
             let timestamp = Local::now().with_timezone(&Utc);
+            
+            // Parse parameters from command string
+            let parameters = parse_parameters(&command_str);
+            
             let cmd = Command {
                 id: None,
-                command,
+                command: command_str,
                 timestamp,
                 directory,
-                exit_code: exit_code,
+                exit_code,
                 tags,
+                parameters,
             };
             let id = db.add_command(&cmd)?;
             println!("Command added to history with ID: {}", id);
+            
+            // If command has parameters, show them
+            if !cmd.parameters.is_empty() {
+                println!("\nDetected parameters:");
+                for param in &cmd.parameters {
+                    let desc = param.description.as_deref().unwrap_or("No description");
+                    let default = param.default_value.as_deref().unwrap_or("None");
+                    println!("  - {}: {} (default: {})", param.name, desc, default);
+                }
+            }
         }
         Commands::Search { query, limit } => {
             let commands = db.search_commands(&query, limit)?;
@@ -183,6 +229,30 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 }
             }
         },
+        Commands::Exec { command_id } => {
+            let command = db.get_command(command_id)?
+                .ok_or_else(|| anyhow!("Command not found with ID: {}", command_id))?;
+            
+            // If command has parameters, substitute them with user input
+            let final_command = if !command.parameters.is_empty() {
+                crate::utils::params::substitute_parameters(&command.command, &command.parameters)?
+            } else {
+                command.command.clone()
+            };
+            
+            println!("\nCommand to execute: {}", final_command);
+            println!("Press Enter to continue or Ctrl+C to cancel...");
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+            
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&final_command)
+                .current_dir(&command.directory)
+                .status()?;
+            
+            println!("Command exited with status: {}", output.code().unwrap_or(-1));
+        }
         Commands::ShellInit { shell } => {
             let script_path = crate::shell::hooks::init_shell(shell)?;
             if !script_path.exists() {

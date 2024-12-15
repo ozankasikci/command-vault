@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{TimeZone, Utc};
 use command_vault::{
     cli::{args::Commands, commands::handle_command},
-    db::Command,
+    db::{Command, models::Parameter},
 };
 use tempfile::tempdir;
 use std::env;
@@ -28,6 +28,7 @@ fn test_handle_command_list() -> Result<()> {
         directory: "/test".to_string(),
         exit_code: None,
         tags: vec![],
+        parameters: Vec::new(),
     };
     db.add_command(&command)?;
     let commands = db.list_commands(10, false)?;
@@ -47,6 +48,7 @@ fn test_ls_with_limit() -> Result<()> {
             directory: "/test".to_string(),
             exit_code: None,
             tags: vec![],
+            parameters: Vec::new(),
         };
         db.add_command(&command)?;
     }
@@ -72,6 +74,7 @@ fn test_ls_ordering() -> Result<()> {
             directory: "/test".to_string(),
             exit_code: None,
             tags: vec![],
+            parameters: Vec::new(),
         };
         db.add_command(&command)?;
     }
@@ -94,6 +97,7 @@ fn test_delete_command() -> Result<()> {
         directory: "/test".to_string(),
         exit_code: None,
         tags: vec![],
+        parameters: Vec::new(),
     };
     let id = db.add_command(&command)?;
     db.delete_command(id)?;
@@ -112,6 +116,7 @@ fn test_search_commands() -> Result<()> {
         directory: "/test".to_string(),
         exit_code: None,
         tags: vec![],
+        parameters: Vec::new(),
     };
     db.add_command(&command)?;
     let commands = db.search_commands("test", 10)?;
@@ -238,6 +243,190 @@ fn test_command_with_stderr() -> Result<()> {
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "ls nonexistent_directory");
     assert_eq!(commands[0].exit_code, Some(1)); // Should match what we set
+    
+    Ok(())
+}
+
+#[test]
+fn test_parameter_parsing() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Test basic parameter
+    let command = Command {
+        id: None,
+        command: "echo @name".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![Parameter {
+            name: "name".to_string(),
+            description: None,
+            default_value: None,
+        }],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 1);
+    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[0].description, None);
+    assert_eq!(saved.parameters[0].default_value, None);
+    
+    // Test parameter with description
+    let command = Command {
+        id: None,
+        command: "echo @name:User_name".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![Parameter {
+            name: "name".to_string(),
+            description: Some("User_name".to_string()),
+            default_value: None,
+        }],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 1);
+    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[0].description, Some("User_name".to_string()));
+    assert_eq!(saved.parameters[0].default_value, None);
+    
+    // Test parameter with description and default value
+    let command = Command {
+        id: None,
+        command: "echo @name:User_name=John".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![Parameter {
+            name: "name".to_string(),
+            description: Some("User_name".to_string()),
+            default_value: Some("John".to_string()),
+        }],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 1);
+    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[0].description, Some("User_name".to_string()));
+    assert_eq!(saved.parameters[0].default_value, Some("John".to_string()));
+    
+    // Test multiple parameters
+    let command = Command {
+        id: None,
+        command: "echo @name:User_name=John @age:User_age=30".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![
+            Parameter {
+                name: "name".to_string(),
+                description: Some("User_name".to_string()),
+                default_value: Some("John".to_string()),
+            },
+            Parameter {
+                name: "age".to_string(),
+                description: Some("User_age".to_string()),
+                default_value: Some("30".to_string()),
+            },
+        ],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 2);
+    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[1].name, "age");
+    
+    Ok(())
+}
+
+#[test]
+fn test_exec_command_with_parameters() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Add a command with parameters
+    let command = Command {
+        id: None,
+        command: "echo @name:User_name=John".to_string(),
+        timestamp: Utc::now(),
+        directory: env::current_dir()?.to_string_lossy().to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![Parameter {
+            name: "name".to_string(),
+            description: Some("User_name".to_string()),
+            default_value: Some("John".to_string()),
+        }],
+    };
+    let id = db.add_command(&command)?;
+    
+    // Set up test environment
+    let old_stdin = std::io::stdin();
+    let old_stdout = std::io::stdout();
+    
+    // Execute command with default parameter
+    let exec_command = Commands::Exec { command_id: id };
+    handle_command(exec_command, &mut db)?;
+    
+    // Verify command execution
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 1);
+    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[0].default_value, Some("John".to_string()));
+    
+    Ok(())
+}
+
+#[test]
+fn test_exec_command_not_found() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Try to execute a non-existent command
+    let exec_command = Commands::Exec { command_id: 999 };
+    let result = handle_command(exec_command, &mut db);
+    
+    // Verify that we get an error
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Command not found"));
+    
+    Ok(())
+}
+
+#[test]
+fn test_parameter_validation() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Test invalid parameter name (starts with number)
+    let command = Command {
+        id: None,
+        command: "echo @1name".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 0); // Invalid parameter should be ignored
+    
+    // Test invalid parameter name (special characters)
+    let command = Command {
+        id: None,
+        command: "echo @name!".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        exit_code: None,
+        tags: vec![],
+        parameters: vec![],
+    };
+    let id = db.add_command(&command)?;
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.parameters.len(), 0); // Invalid parameter should be ignored
     
     Ok(())
 }

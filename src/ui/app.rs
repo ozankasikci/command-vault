@@ -16,6 +16,7 @@ use ratatui::{
 
 use crate::db::{Command, Database};
 use crate::ui::AddCommandApp;
+use crate::utils::params::substitute_parameters;
 
 pub struct App<'a> {
     pub commands: Vec<Command>,
@@ -95,14 +96,29 @@ impl<'a> App<'a> {
                                     // Exit TUI temporarily
                                     restore_terminal(terminal)?;
                                     
+                                    // If command has parameters, substitute them with user input
+                                    let final_command = if !cmd.parameters.is_empty() {
+                                        substitute_parameters(&cmd.command, &cmd.parameters)?
+                                    } else {
+                                        cmd.command.clone()
+                                    };
+
+                                    println!("Command to execute: {}", final_command);
+                                    println!("Press Enter to continue or Ctrl+C to cancel...");
+                                    let mut input = String::new();
+                                    io::stdin().read_line(&mut input)?;
+                                    
                                     // Execute the command
                                     let output = std::process::Command::new("sh")
                                         .arg("-c")
-                                        .arg(&cmd.command)
+                                        .arg(&final_command)
                                         .status();
 
                                     match output {
-                                        Ok(_) => return Ok(()),
+                                        Ok(status) => {
+                                            println!("Command exited with status: {}", status);
+                                            return Ok(());
+                                        }
                                         Err(e) => {
                                             // Re-enable TUI and show error
                                             setup_terminal()?;
@@ -167,6 +183,7 @@ impl<'a> App<'a> {
                                                 directory: cmd.directory,
                                                 exit_code: new_exit_code,
                                                 tags: new_tags,
+                                                parameters: Vec::new(),
                                             };
                                             
                                             if let Err(e) = self.db.update_command(&updated_cmd) {
