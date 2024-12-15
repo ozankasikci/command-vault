@@ -15,6 +15,43 @@ An advanced command history manager that helps you track and search your shell c
 - 📱 Terminal User Interface (TUI) for interactive usage
 - 🔐 Safe command execution with validation
 
+## Usage
+
+### Adding Commands
+```bash
+# Add a command with tags
+command-vault add --tags git,deploy git push origin main
+```
+![Adding Command](demo/add-command3.gif)
+
+### Searching Command History
+```bash
+# Search commands
+command-vault search "git push"
+```
+![Search Commands](demo/search-command.gif)
+
+### Listing Recent Commands
+```bash
+# List recent commands
+command-vault ls
+```
+![Listing Commands](demo/ls-command2.gif)
+
+### Deleting Commands
+```bash
+# Delete a command
+command-vault delete <command-id>
+```
+![Deletion Commands](demo/delete-command.gif)
+
+### Managing Tags
+```bash
+# Show tag command
+command-vault tag # Show tag related commands
+```
+![Tag Commands](demo/tag-command.gif)
+
 ## Installation
 
 ### From Releases
@@ -29,10 +66,25 @@ curl -LO https://github.com/yourusername/command-vault/releases/download/vX.Y.Z/
 chmod +x command-vault-linux-amd64
 # Move it to your PATH
 sudo mv command-vault-linux-amd64 /usr/local/bin/command-vault
+
+# Initialize shell integration (add to your .bashrc or .zshrc)
+source "$(command-vault shell-init)"
 ```
 
 #### Windows
 Download the Windows executable from the releases page and add it to your PATH.
+
+### Shell Integration
+
+Command Vault needs to be integrated with your shell to automatically track commands. Add this to your shell's RC file:
+
+```bash
+# For Bash (~/.bashrc)
+source "$(command-vault shell-init)"
+
+# For Zsh (~/.zshrc)
+source "$(command-vault shell-init)"
+```
 
 ### Building from Source
 
@@ -53,42 +105,6 @@ cargo build --release
    ```bash
    source "$(command-vault shell-init)"
    ```
-
-## Usage
-
-Command Vault can be used both from the command line and through its Terminal User Interface (TUI).
-
-### Command Line Interface
-
-```bash
-# Add a command with tags
-command-vault add --tags git,deploy git push origin main
-```
-![Adding Command](demo/add-command3.gif)
-
-```bash
-# Search commands
-command-vault search "git push"
-```
-![Search Commands](demo/search-command.gif)
-
-```bash
-# List recent commands
-command-vault ls
-```
-![Listing Commands](demo/ls-command2.gif)
-
-```bash
-# Delete a command
-command-vault delete <command-id>
-```
-![Deletion Commands](demo/delete-command.gif)
-
-```bash
-# Show tag command
-command-vault tag # Show tag related commands
-```
-![Tag Commands](demo/tag-command.gif)
 
 ## Development
 
