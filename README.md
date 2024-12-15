@@ -88,6 +88,28 @@ Run tests:
 cargo test
 ```
 
+## Shell Aliases
+
+For easier access, you can add aliases to your shell configuration:
+
+### For Bash/Zsh (add to ~/.zshrc or ~/.bashrc)
+```bash
+alias cmdv='command-vault'
+alias cv='command-vault'
+```
+
+After adding the aliases, restart your shell or run:
+```bash
+source ~/.zshrc  # for Zsh
+source ~/.bashrc # for Bash
+```
+
+Now you can use shorter commands:
+```bash
+cv add 'echo Hello'
+cmdv ls
+```
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
