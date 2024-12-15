@@ -1,4 +1,7 @@
 # Command Vault
+[![Crates.io](https://img.shields.io/crates/v/command-vault.svg?style=flat-square)](https://crates.io/crates/command-vault)
+[![Documentation](https://docs.rs/command-vault/badge.svg)](https://docs.rs/command-vault)
+![example workflow](https://github.com/ozankasikci/command-vault/actions/workflows/test.yml/badge.svg)
 
 Command Vault is a command manager for storing, and executing your complex commands. It provides a user-friendly interface to search, list, and delete commands, as well as tag commands for better organization.
 
