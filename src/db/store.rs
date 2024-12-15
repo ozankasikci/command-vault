@@ -7,23 +7,14 @@ use super::models::Command;
 
 pub struct Database {
     conn: Connection,
-    path: String,
 }
 
 impl Database {
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
-        let db = Database { conn, path: path.to_string() };
+        let db = Database { conn };
         db.init()?;
         Ok(db)
-    }
-
-    pub fn clone_with_new_connection(&self) -> Result<Self> {
-        let conn = Connection::open(&self.path)?;
-        Ok(Database {
-            conn,
-            path: self.path.clone(),
-        })
     }
 
     fn init(&self) -> Result<()> {
@@ -35,8 +26,8 @@ impl Database {
                 timestamp TEXT NOT NULL,
                 directory TEXT NOT NULL,
                 exit_code INTEGER,
-                tags TEXT DEFAULT '',
-                parameters TEXT DEFAULT '[]'
+                tags TEXT NOT NULL DEFAULT '',
+                parameters TEXT NOT NULL DEFAULT '[]'
             )",
             [],
         )?;
@@ -53,8 +44,8 @@ impl Database {
         // Create command_tags table for many-to-many relationship
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS command_tags (
-                command_id INTEGER,
-                tag_id INTEGER,
+                command_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
                 PRIMARY KEY (command_id, tag_id),
                 FOREIGN KEY (command_id) REFERENCES commands(id) ON DELETE CASCADE,
                 FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
@@ -169,23 +160,6 @@ impl Database {
         
         tx.commit()?;
         Ok(())
-    }
-
-    pub fn get_command_tags(&self, command_id: i64) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT t.name 
-             FROM tags t
-             JOIN command_tags ct ON ct.tag_id = t.id
-             WHERE ct.command_id = ?1
-             ORDER BY t.name"
-        )?;
-        
-        let tags = stmt.query_map([command_id], |row| {
-            row.get::<_, String>(0)
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-        
-        Ok(tags)
     }
 
     pub fn search_commands(&self, query: &str, limit: usize) -> Result<Vec<Command>> {

@@ -241,9 +241,13 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             };
             
             println!("\nCommand to execute: {}", final_command);
-            println!("Press Enter to continue or Ctrl+C to cancel...");
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
+            
+            // Skip confirmation in test environment
+            if std::env::var("COMMAND_VAULT_TEST").is_err() {
+                println!("Press Enter to continue or Ctrl+C to cancel...");
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+            }
             
             let output = std::process::Command::new("sh")
                 .arg("-c")

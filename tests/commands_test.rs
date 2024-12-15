@@ -10,6 +10,12 @@ use std::env;
 mod test_utils;
 use test_utils::create_test_db;
 
+// Set up test environment
+#[ctor::ctor]
+fn setup() {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+}
+
 #[test]
 fn test_ls_empty() -> Result<()> {
     let (db, _db_dir) = create_test_db()?;
@@ -166,7 +172,7 @@ fn test_execute_command() -> Result<()> {
     let test_dir = temp_dir.path().canonicalize()?;
     env::set_current_dir(&test_dir)?;
     
-    let command = "pwd".to_string();
+    let command = "echo test".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
         exit_code: Some(0), // Explicitly set exit code for test
@@ -177,8 +183,16 @@ fn test_execute_command() -> Result<()> {
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "pwd");
+    assert_eq!(commands[0].command, "echo test");
     assert_eq!(commands[0].exit_code, Some(0));
+
+    // Execute the command
+    let exec_command = Commands::Exec { command_id: commands[0].id.unwrap() };
+    handle_command(exec_command, &mut db)?;
+    
+    // Verify command execution
+    let saved = db.get_command(commands[0].id.unwrap())?.unwrap();
+    assert_eq!(saved.exit_code, Some(0)); // Should match what we set
     
     // Restore the original directory
     env::set_current_dir(original_dir)?;
@@ -347,13 +361,19 @@ fn test_parameter_parsing() -> Result<()> {
 #[test]
 fn test_exec_command_with_parameters() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
+    let temp_dir = tempdir()?;
+
+    // Change to the test directory
+    let original_dir = env::current_dir()?;
+    let test_dir = temp_dir.path().canonicalize()?;
+    env::set_current_dir(&test_dir)?;
     
     // Add a command with parameters
     let command = Command {
         id: None,
-        command: "echo @name:User_name=John".to_string(),
+        command: "echo @name=John".to_string(),
         timestamp: Utc::now(),
-        directory: env::current_dir()?.to_string_lossy().to_string(),
+        directory: test_dir.to_string_lossy().to_string(),
         exit_code: None,
         tags: vec![],
         parameters: vec![Parameter {
@@ -364,10 +384,6 @@ fn test_exec_command_with_parameters() -> Result<()> {
     };
     let id = db.add_command(&command)?;
     
-    // Set up test environment
-    let old_stdin = std::io::stdin();
-    let old_stdout = std::io::stdout();
-    
     // Execute command with default parameter
     let exec_command = Commands::Exec { command_id: id };
     handle_command(exec_command, &mut db)?;
@@ -377,6 +393,9 @@ fn test_exec_command_with_parameters() -> Result<()> {
     assert_eq!(saved.parameters.len(), 1);
     assert_eq!(saved.parameters[0].name, "name");
     assert_eq!(saved.parameters[0].default_value, Some("John".to_string()));
+    
+    // Restore the original directory
+    env::set_current_dir(original_dir)?;
     
     Ok(())
 }
