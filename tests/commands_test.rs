@@ -199,20 +199,9 @@ fn test_empty_command_validation() -> Result<()> {
 #[test]
 fn test_command_with_output() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
-    let temp_dir = tempdir()?;
-    std::fs::create_dir_all(temp_dir.path())?;
-
-    // Change to the test directory
-    let original_dir = env::current_dir()?;
-    let test_dir = temp_dir.path().canonicalize()?;
-    env::set_current_dir(&test_dir)?;
     
-    // Create a test file with some content
-    let test_content = "Hello, World!";
-    std::fs::write("test.txt", test_content)?;
-    
-    // Test command that produces output
-    let command = "cat test.txt".to_string();
+    // Test command that would produce output
+    let command = "echo 'Hello, World!'".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
         exit_code: None,
@@ -223,14 +212,11 @@ fn test_command_with_output() -> Result<()> {
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "cat test.txt");
+    assert_eq!(commands[0].command, "echo 'Hello, World!'");
     
     // In test mode, we don't actually execute the command
     // so we just verify it was added to the database
     assert!(commands[0].exit_code.is_some());
-    
-    // Restore the original directory
-    env::set_current_dir(original_dir)?;
     
     Ok(())
 }
@@ -238,19 +224,12 @@ fn test_command_with_output() -> Result<()> {
 #[test]
 fn test_command_with_stderr() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
-    let temp_dir = tempdir()?;
-    std::fs::create_dir_all(temp_dir.path())?;
-
-    // Change to the test directory
-    let original_dir = env::current_dir()?;
-    let test_dir = temp_dir.path().canonicalize()?;
-    env::set_current_dir(&test_dir)?;
     
-    // Test command that produces stderr output
-    let command = "cat nonexistent.txt".to_string();
+    // Test command that would produce stderr
+    let command = "ls nonexistent_directory".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: Some(1), 
+        exit_code: Some(1), // Explicitly set exit code for test
         tags: vec![] 
     };
     
@@ -258,11 +237,8 @@ fn test_command_with_stderr() -> Result<()> {
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "cat nonexistent.txt");
-    assert_eq!(commands[0].exit_code, Some(1));
-    
-    // Restore the original directory
-    env::set_current_dir(original_dir)?;
+    assert_eq!(commands[0].command, "ls nonexistent_directory");
+    assert_eq!(commands[0].exit_code, Some(1)); // Should match what we set
     
     Ok(())
 }
