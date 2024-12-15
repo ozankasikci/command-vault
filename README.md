@@ -1,6 +1,22 @@
 # Command Vault
 
-An advanced command history manager that helps you track and search your shell commands across sessions. Command Vault stores your shell commands with rich context including working directory, exit codes, and tags, making it easy to find and reuse commands later.
+Command Vault is a command manager store, and execute your complex commands. It provides a user-friendly interface to search, list, and delete commands, as well as tag commands for better organization.
+
+## Table of Contents
+- [Features](#features)
+- [Usage](#usage)
+  - [Add Commands](#add-commands)
+  - [Search Commands](#search-commands)
+  - [List Commands](#list-commands)
+  - [Delete Commands](#delete-commands)
+  - [Tag Commands](#tag-commands)
+- [Installation](#installation)
+  - [From Releases](#from-releases)
+  - [Shell Integration](#shell-integration)
+  - [Building from Source](#building-from-source)
+- [Development](#development)
+- [Shell Aliases](#shell-aliases)
+- [License](#license)
 
 ## Features
 
@@ -25,7 +41,7 @@ command-vault add echo "Hello, world!"
 ```
 ![Add Command](demo/add-command3.gif)
 
-### Search Command History
+### Search Commands
 ```bash
 # Search commands
 command-vault search "git push"
