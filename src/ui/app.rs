@@ -97,7 +97,9 @@ impl<'a> App<'a> {
                                     // Exit TUI temporarily
                                     restore_terminal(terminal)?;
                                     
-                                    // If command has parameters, substitute them with user input
+                                    // Re-enable colors after restoring terminal
+                                    colored::control::set_override(true);
+
                                     let final_command = if !cmd.parameters.is_empty() {
                                         substitute_parameters(&cmd.command, &cmd.parameters)?
                                     } else {
@@ -113,6 +115,8 @@ impl<'a> App<'a> {
                                         .arg("-c")
                                         .arg(&final_command)
                                         .current_dir(&cmd.directory)
+                                        .env("CARGO_TERM_COLOR", "always")  // Force cargo to use colors
+                                        .env("RUST_BACKTRACE", "1")  // Also enable colored backtraces
                                         .output();
 
                                     match output {
@@ -123,6 +127,10 @@ impl<'a> App<'a> {
                                             if !output.stderr.is_empty() {
                                                 println!("{}", String::from_utf8_lossy(&output.stderr));
                                             }
+                                            println!("{}: {}", 
+                                                "Command completed".green().bold(),
+                                                output.status.to_string().yellow()
+                                            );
                                             return Ok(());
                                         }
                                         Err(e) => {
@@ -470,6 +478,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     terminal.show_cursor()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     disable_raw_mode()?;
+    colored::control::set_override(true);
     Ok(())
 }
 

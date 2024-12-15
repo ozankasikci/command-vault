@@ -261,12 +261,20 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
             println!("{}: {}", "Directory".green().bold(), command.directory.cyan());
             
+            // Re-enable colored output before executing command
+            colored::control::set_override(true);
+            
             // Execute the command
             let output = std::process::Command::new("sh")
                 .arg("-c")
                 .arg(&final_command)
                 .current_dir(&command.directory)
+                .env("CARGO_TERM_COLOR", "always")  // Force cargo to use colors
+                .env("RUST_BACKTRACE", "1")  // Also enable colored backtraces
                 .output()?;
+
+            // Re-enable colored output after command execution
+            colored::control::set_override(true);
 
             // Print the output
             if !output.stdout.is_empty() {

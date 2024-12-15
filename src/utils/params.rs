@@ -5,7 +5,7 @@ use std::io::Write;
 use colored::*;
 use crossterm::{
     cursor::MoveTo,
-    terminal::{Clear, ClearType},
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
     event::{self, Event, KeyCode, KeyModifiers},
     ExecutableCommand, QueueableCommand,
     style::Print,
@@ -55,136 +55,144 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
     let mut stdout = std::io::stdout();
     let mut param_values: HashMap<String, String> = HashMap::new();
     
-    crossterm::terminal::enable_raw_mode()?;
+    enable_raw_mode()?;
     stdout.execute(Clear(ClearType::All))?;
 
-    for param in parameters {
-        let default_str = param.default_value.as_deref().unwrap_or("");
-        let desc = param.description.as_deref().unwrap_or("");
-        let mut input = default_str.to_string();
-        let mut cursor_pos = input.len();
+    let result = (|| -> Result<String> {
+        for param in parameters {
+            let default_str = param.default_value.as_deref().unwrap_or("");
+            let desc = param.description.as_deref().unwrap_or("");
+            let mut input = default_str.to_string();
+            let mut cursor_pos = input.len();
 
-        loop {
-            // Clear screen
-            stdout.queue(Clear(ClearType::All))?;
+            loop {
+                // Clear screen
+                stdout.queue(Clear(ClearType::All))?;
 
-            // Header
-            stdout.queue(MoveTo(0, HEADER_LINE))?
-                  .queue(Print("Enter values for command parameters:"))?;
+                // Header
+                stdout.queue(MoveTo(0, HEADER_LINE))?
+                      .queue(Print("Enter values for command parameters:"))?;
 
-            // Top separator
-            stdout.queue(MoveTo(0, SEPARATOR_LINE))?
-                  .queue(Print("─".repeat(45).dimmed()))?;
+                // Top separator
+                stdout.queue(MoveTo(0, SEPARATOR_LINE))?
+                      .queue(Print("─".repeat(45).dimmed()))?;
 
-            // Parameter info
-            stdout.queue(MoveTo(0, PARAM_LINE))?
-                  .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
-            if !desc.is_empty() {
-                stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
-            }
+                // Parameter info
+                stdout.queue(MoveTo(0, PARAM_LINE))?
+                      .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
+                if !desc.is_empty() {
+                    stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
+                }
 
-            // Default value
-            stdout.queue(MoveTo(0, DEFAULT_LINE))?
-                  .queue(Print(format!("{}: [{}]", 
-                      "Default value".green().bold(), 
-                      default_str.cyan()
-                  )))?;
+                // Default value
+                stdout.queue(MoveTo(0, DEFAULT_LINE))?
+                      .queue(Print(format!("{}: [{}]", 
+                          "Default value".green().bold(), 
+                          default_str.cyan()
+                      )))?;
 
-            // Input field
-            stdout.queue(MoveTo(0, INPUT_LINE))?
-                  .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
+                // Input field
+                stdout.queue(MoveTo(0, INPUT_LINE))?
+                      .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
 
-            // Preview section
-            let mut preview_command = command.to_string();
-            for (param_name, value) in &param_values {
-                preview_command = preview_command.replace(&format!("@{}", param_name), value);
-            }
-            if !input.is_empty() {
-                preview_command = preview_command.replace(&format!("@{}", param.name), &input);
-            } else if let Some(default) = &param.default_value {
-                preview_command = preview_command.replace(&format!("@{}", param.name), default);
-            }
+                // Preview section
+                let mut preview_command = command.to_string();
+                for (param_name, value) in &param_values {
+                    preview_command = preview_command.replace(&format!("@{}", param_name), value);
+                }
+                if !input.is_empty() {
+                    preview_command = preview_command.replace(&format!("@{}", param.name), &input);
+                } else if let Some(default) = &param.default_value {
+                    preview_command = preview_command.replace(&format!("@{}", param.name), default);
+                }
 
-            // Bottom separator
-            stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
-                  .queue(Print("─".repeat(45).dimmed()))?;
+                // Bottom separator
+                stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
+                      .queue(Print("─".repeat(45).dimmed()))?;
 
-            // Command preview
-            stdout.queue(MoveTo(0, COMMAND_LINE))?
-                  .queue(Print(format!("{}: {}", 
-                      "Command to execute".blue().bold(), 
-                      preview_command.yellow()
-                  )))?;
+                // Command preview
+                stdout.queue(MoveTo(0, COMMAND_LINE))?
+                      .queue(Print(format!("{}: {}", 
+                          "Command to execute".blue().bold(), 
+                          preview_command.yellow()
+                      )))?;
 
-            // Working directory
-            stdout.queue(MoveTo(0, WORKDIR_LINE))?
-                  .queue(Print(format!("{}: {}", 
-                      "Working directory".green().bold(), 
-                      std::env::current_dir()?.to_string_lossy().cyan()
-                  )))?;
+                // Working directory
+                stdout.queue(MoveTo(0, WORKDIR_LINE))?
+                      .queue(Print(format!("{}: {}", 
+                          "Working directory".green().bold(), 
+                          std::env::current_dir()?.to_string_lossy().cyan()
+                      )))?;
 
-            // Position cursor at input
-            let input_prompt = "Enter value: ";
-            stdout.queue(MoveTo(
-                (input_prompt.len() + cursor_pos) as u16,
-                INPUT_LINE
-            ))?;
-            
-            stdout.flush()?;
+                // Position cursor at input
+                let input_prompt = "Enter value: ";
+                stdout.queue(MoveTo(
+                    (input_prompt.len() + cursor_pos) as u16,
+                    INPUT_LINE
+                ))?;
+                
+                stdout.flush()?;
 
-            // Handle input
-            if let Event::Key(key) = event::read()? {
-                match (key.code, key.modifiers) {
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                        // Clean up terminal
-                        crossterm::terminal::disable_raw_mode()?;
-                        stdout.execute(Clear(ClearType::All))?
-                              .execute(MoveTo(0, 0))?;
-                        return Err(anyhow!("Operation cancelled by user"));
-                    },
-                    (KeyCode::Enter, _) => break,
-                    (KeyCode::Char(c), _) => {
-                        input.insert(cursor_pos, c);
-                        cursor_pos += 1;
+                // Handle input
+                if let Event::Key(key) = event::read()? {
+                    match (key.code, key.modifiers) {
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                            return Err(anyhow!("Operation cancelled by user"));
+                        },
+                        (KeyCode::Enter, _) => break,
+                        (KeyCode::Char(c), _) => {
+                            input.insert(cursor_pos, c);
+                            cursor_pos += 1;
+                        }
+                        (KeyCode::Backspace, _) if cursor_pos > 0 => {
+                            input.remove(cursor_pos - 1);
+                            cursor_pos -= 1;
+                        }
+                        (KeyCode::Left, _) if cursor_pos > 0 => {
+                            cursor_pos -= 1;
+                        }
+                        (KeyCode::Right, _) if cursor_pos < input.len() => {
+                            cursor_pos += 1;
+                        }
+                        (KeyCode::Esc, _) => {
+                            input.clear();
+                            break;
+                        }
+                        _ => {}
                     }
-                    (KeyCode::Backspace, _) if cursor_pos > 0 => {
-                        input.remove(cursor_pos - 1);
-                        cursor_pos -= 1;
-                    }
-                    (KeyCode::Left, _) if cursor_pos > 0 => {
-                        cursor_pos -= 1;
-                    }
-                    (KeyCode::Right, _) if cursor_pos < input.len() => {
-                        cursor_pos += 1;
-                    }
-                    (KeyCode::Esc, _) => {
-                        input.clear();
-                        break;
-                    }
-                    _ => {}
                 }
             }
+
+            let value = if input.is_empty() {
+                param.default_value.clone().unwrap_or_default()
+            } else {
+                input
+            };
+            param_values.insert(param.name.clone(), value.clone());
+            final_command = final_command.replace(&format!("@{}", param.name), &value);
         }
 
-        let value = if input.is_empty() {
-            param.default_value.clone().unwrap_or_default()
-        } else {
-            input
-        };
-        param_values.insert(param.name.clone(), value.clone());
-        final_command = final_command.replace(&format!("@{}", param.name), &value);
-    }
+        Ok(final_command)
+    })();
 
-    // Cleanup and restore terminal
-    crossterm::terminal::disable_raw_mode()?;
+    // Always cleanup terminal state, regardless of success or error
+    disable_raw_mode()?;
     stdout.execute(Clear(ClearType::All))?
           .execute(MoveTo(0, 0))?;
 
-    // Final display
-    println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
-    println!("{}: {}", "Working directory".green().bold(), std::env::current_dir()?.to_string_lossy().cyan());
+    // Re-enable colored output
+    colored::control::set_override(true);
     
-    Ok(final_command)
+    // Now handle the result
+    match result {
+        Ok(cmd) => {
+            // Final display
+            println!("\n{}: {}", "Command to execute".blue().bold(), cmd.yellow());
+            println!("{}: {}", "Working directory".green().bold(), std::env::current_dir()?.to_string_lossy().cyan());
+            Ok(cmd)
+        }
+        Err(e) => Err(e)
+    }
 }
 
 #[cfg(test)]
