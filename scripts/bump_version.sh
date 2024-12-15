@@ -45,8 +45,11 @@ case $VERSION_TYPE in
         # Create tag
         git tag -a "v$NEW_VERSION" -m "Version $NEW_VERSION"
 
-        echo "Version bumped successfully!"
-        echo "Run 'git push && git push --tags' to push changes to remote"
+        # Push changes and tags
+        echo "Pushing changes and tags..."
+        git push && git push --tags
+
+        echo "Version bump complete!"
         ;;
     *)
         usage
