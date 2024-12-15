@@ -70,7 +70,7 @@ command-vault add --tags git,deploy git push origin main
 # Search commands
 command-vault search "git push"
 ```
-![Listing Commands](demo/search-command.gif)
+![Search Commands](demo/search-command.gif)
 
 ```bash
 # List recent commands
@@ -82,12 +82,13 @@ command-vault ls
 # Delete a command
 command-vault delete <command-id>
 ```
-![Listing Commands](demo/delete-command.gif)
+![Deletion Commands](demo/delete-command.gif)
 
 ```bash
-# Show command details
-command-vault show <command-id>
+# Show tag command
+command-vault tag # Show tag related commands
 ```
+![Tag Commands](demo/tag-command.gif)
 
 ## Development
 
