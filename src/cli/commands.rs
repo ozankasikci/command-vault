@@ -100,7 +100,8 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
 
             let (final_exit_code, output) = if cfg!(test) {
                 // In test mode, don't actually execute the command
-                (exit_code.or(Some(0)), String::new())
+                // Use the provided exit code or default to 0
+                (exit_code.unwrap_or(0), String::new())
             } else {
                 // Execute the command
                 let output = std::process::Command::new("sh")
@@ -116,7 +117,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                     io::stderr().write_all(&output.stderr)?;
                 }
                 
-                (exit_code.or(Some(output.status.code().unwrap_or(0))), 
+                (exit_code.unwrap_or_else(|| output.status.code().unwrap_or(0)), 
                  String::from_utf8_lossy(&output.stdout).into_owned())
             };
 
@@ -127,7 +128,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command,
                 timestamp,
                 directory,
-                exit_code: final_exit_code,
+                exit_code: Some(final_exit_code),
                 tags,
             };
             let id = db.add_command(&cmd)?;

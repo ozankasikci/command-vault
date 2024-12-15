@@ -250,7 +250,7 @@ fn test_command_with_stderr() -> Result<()> {
     let command = "cat nonexistent.txt".to_string();
     let add_command = Commands::Add { 
         command: vec![command.clone()], 
-        exit_code: None,
+        exit_code: Some(1), 
         tags: vec![] 
     };
     
@@ -259,10 +259,7 @@ fn test_command_with_stderr() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "cat nonexistent.txt");
-    
-    // In test mode, we don't actually execute the command
-    // so we just verify it was added to the database
-    assert!(commands[0].exit_code.is_some());
+    assert_eq!(commands[0].exit_code, Some(1));
     
     // Restore the original directory
     env::set_current_dir(original_dir)?;
