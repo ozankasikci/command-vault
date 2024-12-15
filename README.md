@@ -22,13 +22,8 @@ Command Vault is a command manager store, and execute your complex commands. It 
 
 - 🔍 Smart search through command history
 - 🏷️ Tag commands for better organization
-- 📂 Track working directory for each command
-- ❌ Record exit codes to identify failed commands
-- 🕒 Chronological command history
 - 🐚 Cross-shell support (Bash, Zsh)
 - 💾 Local SQLite database for fast searching
-- 🔄 Automatic command logging
-- 📱 Terminal User Interface (TUI) for interactive usage
 - 🔐 Safe command execution with validation
 
 ## Usage
