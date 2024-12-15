@@ -112,67 +112,6 @@ cv add 'echo Hello'
 cmdv ls
 ```
 
-## Example Use Cases
-
-Here are some common scenarios where command-vault can be particularly useful:
-
-### Docker Commands
-```bash
-# Clean up all unused containers, networks, and dangling images
-cv add --tags docker,cleanup 'docker system prune -af --volumes'
-
-# Run PostgreSQL container with specific config
-cv add --tags docker,db 'docker run --name postgres -e POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 -v pgdata:/var/lib/postgresql/data -d postgres:15'
-
-# Build and run docker-compose with specific env file
-cv add --tags docker,compose 'docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build'
-```
-
-### Git Operations
-```bash
-# Undo last commit but keep changes
-cv add --tags git 'git reset --soft HEAD~1'
-
-# Clean up local branches that were merged to main
-cv add --tags git,cleanup 'git branch --merged main | grep -v "^[ *]*main" | xargs git branch -d'
-
-# Complex git log format
-cv add --tags git,log 'git log --graph --pretty=format:"%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset" --abbrev-commit'
-```
-
-### System Administration
-```bash
-# Find large files and directories
-cv add --tags system 'find . -type f -size +100M -exec ls -lh {} \; | sort -k5,5 -h'
-
-# Monitor system resources
-cv add --tags system,monitoring 'top -b -n 1 | head -n 20 > system_status.log && free -h >> system_status.log && df -h >> system_status.log'
-
-# Complex file search and replace
-cv add --tags files 'find . -type f -name "*.js" -exec sed -i "s/oldText/newText/g" {} +'
-```
-
-### Development Tools
-```bash
-# Start development environment with specific config
-cv add --tags dev 'export NODE_ENV=development && npm run build && npm run start:dev'
-
-# Run tests with specific configuration
-cv add --tags test 'pytest --cov=app --cov-report=html --verbose --log-level=DEBUG tests/'
-
-# Complex database query
-cv add --tags db 'psql -h localhost -U myuser -d mydb -c "SELECT table_name, pg_size_pretty(pg_total_relation_size(table_name::text)) AS size FROM information_schema.tables WHERE table_schema = '\''public'\''"'
-```
-
-### AWS CLI Commands
-```bash
-# List EC2 instances with specific tags
-cv add --tags aws 'aws ec2 describe-instances --filters "Name=tag:Environment,Values=Production" --query "Reservations[].Instances[].{ID:InstanceId,Type:InstanceType,Name:Tags[?Key=='\''Name'\''].Value|[0]}" --output table'
-
-# S3 sync with specific excludes
-cv add --tags aws,s3 'aws s3 sync . s3://my-bucket/path --exclude "*.tmp" --exclude "node_modules/*" --delete'
-```
-
 These commands can be easily retrieved later using tags:
 ```bash
 # Find all docker-related commands
