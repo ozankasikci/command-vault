@@ -244,7 +244,9 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             
             // If command has parameters, substitute them with user input
             let final_command = if !command.parameters.is_empty() {
-                match crate::utils::params::substitute_parameters(&command.command, &command.parameters) {
+                // Re-parse parameters from the current command to get the latest names
+                let current_params = crate::utils::params::parse_parameters(&command.command);
+                match crate::utils::params::substitute_parameters(&command.command, &current_params) {
                     Ok(cmd) => cmd,
                     Err(e) => {
                         if e.to_string() == "Operation cancelled by user" {

@@ -100,8 +100,11 @@ impl<'a> App<'a> {
                                     // Re-enable colors after restoring terminal
                                     colored::control::set_override(true);
 
+                                    // If command has parameters, substitute them with user input
                                     let final_command = if !cmd.parameters.is_empty() {
-                                        substitute_parameters(&cmd.command, &cmd.parameters)?
+                                        // Re-parse parameters from the current command to get the latest names
+                                        let current_params = crate::utils::params::parse_parameters(&cmd.command);
+                                        substitute_parameters(&cmd.command, &current_params)?
                                     } else {
                                         cmd.command.clone()
                                     };
