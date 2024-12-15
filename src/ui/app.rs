@@ -7,10 +7,10 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Terminal,
 };
 
@@ -62,6 +62,11 @@ impl<'a> App<'a> {
                     }
                     KeyCode::Char('?') => {
                         self.show_help = !self.show_help;
+                        continue; // Skip further processing when toggling help
+                    }
+                    _ if self.show_help => {
+                        // If help is shown, ignore all other keys except those above
+                        continue;
                     }
                     KeyCode::Char('c') => {
                         if let Some(selected) = self.selected {
@@ -256,6 +261,54 @@ impl<'a> App<'a> {
     }
 
     fn ui(&mut self, f: &mut ratatui::Frame) {
+        if self.show_help {
+            let help_text = vec![
+                "Command Vault Help",
+                "",
+                "Navigation:",
+                "  ↑/k    - Move cursor up",
+                "  ↓/j    - Move cursor down",
+                "  q      - Quit the application",
+                "  Ctrl+c - Force quit",
+                "",
+                "Command Actions:",
+                "  Enter  - Execute selected command in the current shell",
+                "  x      - Execute selected command in a new shell",
+                "  c/y    - Copy command to clipboard (both keys work the same)",
+                "  e      - Edit command (modify command text, tags, or exit code)",
+                "  d      - Delete selected command permanently",
+                "",
+                "Filtering and Search:",
+                "  /      - Start filtering commands (type to filter)",
+                "  Enter  - Apply filter",
+                "  Esc    - Clear filter",
+                "",
+                "Display:",
+                "  ?      - Toggle this help screen",
+                "",
+                "Command Details:",
+                "  - Commands show timestamp, command text, and tags",
+                "  - Red numbers in [brackets] indicate non-zero exit codes",
+                "  - Tags are shown in green with # prefix",
+                "  - Command IDs are shown in parentheses",
+                "",
+                "Tips:",
+                "  - Use tags to organize related commands",
+                "  - Filter by typing part of command or tag",
+                "  - Edit command to add/modify tags later",
+            ];
+
+            let help_paragraph = Paragraph::new(help_text.join("\n"))
+                .style(Style::default().fg(Color::White))
+                .block(Block::default().borders(Borders::ALL).title("Help (press ? to close)"));
+
+            // Center the help window
+            let area = centered_rect(80, 80, f.size());
+            f.render_widget(Clear, area); // Clear the background
+            f.render_widget(help_paragraph, area);
+            return;
+        }
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
@@ -378,6 +431,18 @@ impl<'a> App<'a> {
             .style(Style::default().fg(Color::Gray));
         f.render_widget(status, chunks[3]);
     }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    // Calculate popup size based on percentage of screen size
+    let popup_width = (r.width as f32 * (percent_x as f32 / 100.0)) as u16;
+    let popup_height = (r.height as f32 * (percent_y as f32 / 100.0)) as u16;
+
+    // Calculate popup position to center it
+    let popup_x = ((r.width - popup_width) / 2) + r.x;
+    let popup_y = ((r.height - popup_height) / 2) + r.y;
+
+    Rect::new(popup_x, popup_y, popup_width, popup_height)
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {

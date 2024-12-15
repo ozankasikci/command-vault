@@ -1,7 +1,7 @@
 use std::io::Stdout;
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -20,6 +20,10 @@ pub type CommandResult = Option<(String, Vec<String>, Option<i32>)>;
 pub struct AddCommandApp {
     /// The command being entered
     command: String,
+    /// Current cursor position in the command
+    command_cursor: usize,
+    /// Current line in multi-line command
+    command_line: usize,
     /// Tags for the command
     tags: Vec<String>,
     /// Current tag being entered
@@ -30,17 +34,18 @@ pub struct AddCommandApp {
     input_mode: InputMode,
     /// Suggested tags
     suggested_tags: Vec<String>,
-    /// Cursor position
-    cursor_position: usize,
+    /// Previous input mode (for returning from help)
+    previous_mode: InputMode,
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Clone)]
 enum InputMode {
     #[default]
     Command,
     Tag,
     ExitCode,
     Confirm,
+    Help,
 }
 
 impl AddCommandApp {
@@ -61,102 +66,169 @@ impl AddCommandApp {
 
             if let Event::Key(key) = event::read()? {
                 match self.input_mode {
-                    InputMode::Command => {
-                        match key.code {
-                            KeyCode::Enter => {
-                                if !self.command.is_empty() {
-                                    self.suggest_tags();
-                                    self.input_mode = InputMode::Tag;
-                                }
-                            }
-                            KeyCode::Char(c) => {
-                                self.command.insert(self.cursor_position, c);
-                                self.cursor_position += 1;
-                            }
-                            KeyCode::Backspace => {
-                                if self.cursor_position > 0 {
-                                    self.command.remove(self.cursor_position - 1);
-                                    self.cursor_position -= 1;
-                                }
-                            }
-                            KeyCode::Left => {
-                                if self.cursor_position > 0 {
-                                    self.cursor_position -= 1;
-                                }
-                            }
-                            KeyCode::Right => {
-                                if self.cursor_position < self.command.len() {
-                                    self.cursor_position += 1;
-                                }
-                            }
-                            KeyCode::Esc => {
-                                return Ok(None);
-                            }
-                            _ => {}
+                    InputMode::Help => match key.code {
+                        KeyCode::Char('?') | KeyCode::Esc => {
+                            self.input_mode = self.previous_mode.clone();
                         }
-                    }
-                    InputMode::Tag => {
-                        match key.code {
-                            KeyCode::Enter => {
-                                if !self.current_tag.is_empty() {
-                                    self.tags.push(self.current_tag.clone());
-                                    self.current_tag.clear();
-                                } else {
-                                    self.input_mode = InputMode::ExitCode;
-                                }
-                            }
-                            KeyCode::Char(c) => {
-                                self.current_tag.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                self.current_tag.pop();
-                            }
-                            KeyCode::Tab => {
-                                if !self.suggested_tags.is_empty() {
-                                    self.tags.push(self.suggested_tags[0].clone());
-                                    self.suggested_tags.remove(0);
-                                }
-                            }
-                            KeyCode::Esc => {
-                                self.input_mode = InputMode::Command;
-                            }
-                            _ => {}
+                        _ => {}
+                    },
+                    _ => match key.code {
+                        KeyCode::Char('?') => {
+                            eprintln!("Debug: ? key pressed, switching to help mode");
+                            self.previous_mode = self.input_mode.clone();
+                            self.input_mode = InputMode::Help;
+                            eprintln!("Debug: Input mode is now Help");
                         }
-                    }
-                    InputMode::ExitCode => {
-                        match key.code {
-                            KeyCode::Enter => {
-                                self.input_mode = InputMode::Confirm;
-                            }
-                            KeyCode::Char(c) if c.is_ascii_digit() => {
-                                let digit = c.to_digit(10).unwrap() as i32;
-                                self.exit_code = Some(self.exit_code.unwrap_or(0) * 10 + digit);
-                            }
-                            KeyCode::Backspace => {
-                                if let Some(code) = self.exit_code {
-                                    self.exit_code = Some(code / 10);
-                                    if self.exit_code == Some(0) {
-                                        self.exit_code = None;
+                        _ => match self.input_mode {
+                            InputMode::Command => match key.code {
+                                KeyCode::Enter => {
+                                    if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                        // Add newline to command
+                                        self.command.insert(self.command_cursor, '\n');
+                                        self.command_cursor += 1;
+                                        self.command_line += 1;
+                                    } else {
+                                        if !self.command.is_empty() {
+                                            self.suggest_tags();
+                                            self.input_mode = InputMode::Tag;
+                                        }
                                     }
                                 }
+                                KeyCode::Char(c) => {
+                                    self.command.insert(self.command_cursor, c);
+                                    self.command_cursor += 1;
+                                }
+                                KeyCode::Backspace => {
+                                    if self.command_cursor > 0 {
+                                        self.command.remove(self.command_cursor - 1);
+                                        self.command_cursor -= 1;
+                                        if self.command_cursor > 0 && self.command.chars().nth(self.command_cursor - 1) == Some('\n') {
+                                            self.command_line -= 1;
+                                        }
+                                    }
+                                }
+                                KeyCode::Left => {
+                                    if self.command_cursor > 0 {
+                                        self.command_cursor -= 1;
+                                        if self.command_cursor > 0 && self.command.chars().nth(self.command_cursor - 1) == Some('\n') {
+                                            self.command_line -= 1;
+                                        }
+                                    }
+                                }
+                                KeyCode::Right => {
+                                    if self.command_cursor < self.command.len() {
+                                        if self.command.chars().nth(self.command_cursor) == Some('\n') {
+                                            self.command_line += 1;
+                                        }
+                                        self.command_cursor += 1;
+                                    }
+                                }
+                                KeyCode::Up => {
+                                    // Move cursor to previous line
+                                    let current_line_start = self.command[..self.command_cursor]
+                                        .rfind('\n')
+                                        .map(|pos| pos + 1)
+                                        .unwrap_or(0);
+                                    if let Some(prev_line_start) = self.command[..current_line_start.saturating_sub(1)]
+                                        .rfind('\n')
+                                        .map(|pos| pos + 1) {
+                                        let column = self.command_cursor - current_line_start;
+                                        self.command_cursor = prev_line_start + column.min(
+                                            self.command[prev_line_start..current_line_start.saturating_sub(1)]
+                                                .chars()
+                                                .count(),
+                                        );
+                                        self.command_line -= 1;
+                                    }
+                                }
+                                KeyCode::Down => {
+                                    // Move cursor to next line
+                                    let current_line_start = self.command[..self.command_cursor]
+                                        .rfind('\n')
+                                        .map(|pos| pos + 1)
+                                        .unwrap_or(0);
+                                    if let Some(next_line_start) = self.command[self.command_cursor..]
+                                        .find('\n')
+                                        .map(|pos| self.command_cursor + pos + 1) {
+                                        let column = self.command_cursor - current_line_start;
+                                        let next_line_end = self.command[next_line_start..]
+                                            .find('\n')
+                                            .map(|pos| next_line_start + pos)
+                                            .unwrap_or_else(|| self.command.len());
+                                        self.command_cursor = next_line_start + column.min(next_line_end - next_line_start);
+                                        self.command_line += 1;
+                                    }
+                                }
+                                KeyCode::Esc => {
+                                    return Ok(None);
+                                }
+                                _ => {}
+                            },
+                            InputMode::Tag => {
+                                match key.code {
+                                    KeyCode::Enter => {
+                                        if !self.current_tag.is_empty() {
+                                            self.tags.push(self.current_tag.clone());
+                                            self.current_tag.clear();
+                                        } else {
+                                            self.input_mode = InputMode::ExitCode;
+                                        }
+                                    }
+                                    KeyCode::Char(c) => {
+                                        self.current_tag.push(c);
+                                    }
+                                    KeyCode::Backspace => {
+                                        self.current_tag.pop();
+                                    }
+                                    KeyCode::Tab => {
+                                        if !self.suggested_tags.is_empty() {
+                                            self.tags.push(self.suggested_tags[0].clone());
+                                            self.suggested_tags.remove(0);
+                                        }
+                                    }
+                                    KeyCode::Esc => {
+                                        self.input_mode = InputMode::Command;
+                                    }
+                                    _ => {}
+                                }
                             }
-                            KeyCode::Esc => {
-                                self.input_mode = InputMode::Tag;
+                            InputMode::ExitCode => {
+                                match key.code {
+                                    KeyCode::Enter => {
+                                        self.input_mode = InputMode::Confirm;
+                                    }
+                                    KeyCode::Char(c) if c.is_ascii_digit() => {
+                                        let digit = c.to_digit(10).unwrap() as i32;
+                                        self.exit_code = Some(self.exit_code.unwrap_or(0) * 10 + digit);
+                                    }
+                                    KeyCode::Backspace => {
+                                        if let Some(code) = self.exit_code {
+                                            self.exit_code = Some(code / 10);
+                                            if self.exit_code == Some(0) {
+                                                self.exit_code = None;
+                                            }
+                                        }
+                                    }
+                                    KeyCode::Esc => {
+                                        self.input_mode = InputMode::Tag;
+                                    }
+                                    _ => {}
+                                }
                             }
-                            _ => {}
-                        }
-                    }
-                    InputMode::Confirm => {
-                        match key.code {
-                            KeyCode::Char('y') => {
-                                return Ok(Some((
-                                    self.command.clone(),
-                                    self.tags.clone(),
-                                    self.exit_code,
-                                )));
-                            }
-                            KeyCode::Char('n') | KeyCode::Esc => {
-                                return Ok(None);
+                            InputMode::Confirm => {
+                                match key.code {
+                                    KeyCode::Char('y') => {
+                                        return Ok(Some((
+                                            self.command.clone(),
+                                            self.tags.clone(),
+                                            self.exit_code,
+                                        )));
+                                    }
+                                    KeyCode::Char('n') | KeyCode::Esc => {
+                                        return Ok(None);
+                                    }
+                                    _ => {}
+                                }
                             }
                             _ => {}
                         }
@@ -168,7 +240,7 @@ impl AddCommandApp {
 
     pub fn set_command(&mut self, command: String) {
         self.command = command;
-        self.cursor_position = self.command.len();
+        self.command_cursor = self.command.len();
     }
 
     pub fn set_tags(&mut self, tags: Vec<String>) {
@@ -180,79 +252,122 @@ impl AddCommandApp {
     }
 
     fn ui(&self, f: &mut ratatui::Frame) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(1)
-            .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Length(3),  // Command input
-                Constraint::Length(3),  // Tags input
-                Constraint::Length(3),  // Exit code input
-                Constraint::Min(0),     // Message/Help
-            ])
-            .split(f.size());
+        match self.input_mode {
+            InputMode::Help => {
+                let help_text = vec![
+                    "Command Vault Help",
+                    "",
+                    "Global Commands:",
+                    "  ?      - Toggle this help screen",
+                    "  Esc    - Go back / Cancel",
+                    "",
+                    "Command Input Mode:",
+                    "  Enter        - Continue to tag input",
+                    "  Shift+Enter  - Add new line",
+                    "  ←/→         - Move cursor",
+                    "  ↑/↓         - Navigate between lines",
+                    "",
+                    "Tag Input Mode:",
+                    "  Enter  - Add tag",
+                    "  Tab    - Show tag suggestions",
+                    "",
+                    "Exit Code Input Mode:",
+                    "  Enter  - Continue to confirmation",
+                    "",
+                    "Confirmation Mode:",
+                    "  y/Y    - Save command",
+                    "  n/N    - Cancel",
+                ];
 
-        // Title
-        let title = Paragraph::new("Add Command")
-            .style(Style::default().fg(Color::Cyan))
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(title, chunks[0]);
+                let help_paragraph = Paragraph::new(help_text.join("\n"))
+                    .style(Style::default().fg(Color::White))
+                    .block(Block::default().borders(Borders::ALL).title("Help (press ? or Esc to close)"));
 
-        // Command input
-        let command_input = Paragraph::new(format!(
-            "{}\n{}",
-            self.command,
-            if self.input_mode == InputMode::Command { "│" } else { "" }
-        ))
-        .style(Style::default().fg(if self.input_mode == InputMode::Command { Color::Yellow } else { Color::Gray }))
-        .block(Block::default().borders(Borders::ALL).title("Command"));
-        f.render_widget(command_input, chunks[1]);
+                // Center the help window
+                let area = centered_rect(60, 80, f.size());
+                f.render_widget(Clear, area); // Clear the background
+                f.render_widget(help_paragraph, area);
+            }
+            _ => {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints([
+                        Constraint::Length(3),  // Title
+                        Constraint::Min(5),     // Command input
+                        Constraint::Length(3),  // Tags input
+                        Constraint::Length(3),  // Exit code input
+                        Constraint::Min(0),     // Message/Help
+                    ])
+                    .split(f.size());
 
-        // Tags input
-        let mut tags_text = self.tags.join(", ");
-        if !tags_text.is_empty() {
-            tags_text.push_str(", ");
-        }
-        tags_text.push_str(&self.current_tag);
-        if self.input_mode == InputMode::Tag {
-            tags_text.push('│');
-        }
-        let tags_input = Paragraph::new(tags_text)
-            .style(Style::default().fg(if self.input_mode == InputMode::Tag { Color::Yellow } else { Color::Gray }))
-            .block(Block::default().borders(Borders::ALL).title("Tags"));
-        f.render_widget(tags_input, chunks[2]);
+                // Title
+                let title = Paragraph::new("Add Command")
+                    .style(Style::default().fg(Color::Cyan))
+                    .block(Block::default().borders(Borders::ALL));
+                f.render_widget(title, chunks[0]);
 
-        // Exit code input
-        let exit_code_text = self.exit_code.map_or_else(String::new, |c| c.to_string());
-        let exit_code_input = Paragraph::new(format!(
-            "{}\n{}",
-            exit_code_text,
-            if self.input_mode == InputMode::ExitCode { "│" } else { "" }
-        ))
-        .style(Style::default().fg(if self.input_mode == InputMode::ExitCode { Color::Yellow } else { Color::Gray }))
-        .block(Block::default().borders(Borders::ALL).title("Exit Code"));
-        f.render_widget(exit_code_input, chunks[3]);
+                // Command input
+                let mut command_text = self.command.clone();
+                if self.input_mode == InputMode::Command {
+                    command_text.insert(self.command_cursor, '│'); // Add cursor
+                }
+                let command_input = Paragraph::new(command_text)
+                    .style(Style::default().fg(if self.input_mode == InputMode::Command {
+                        Color::Yellow
+                    } else {
+                        Color::Gray
+                    }))
+                    .block(Block::default().borders(Borders::ALL).title("Command (Shift+Enter for new line)"))
+                    .wrap(ratatui::widgets::Wrap { trim: false });
+                f.render_widget(command_input, chunks[1]);
 
-        // Help text or confirmation prompt
-        let help_text = match self.input_mode {
-            InputMode::Command => "Enter command (Enter to continue, Esc to cancel)",
-            InputMode::Tag => "Enter tags (Enter when done, Tab for suggestions, Esc to go back)",
-            InputMode::ExitCode => "Enter exit code (Enter to continue, Esc to go back)",
-            InputMode::Confirm => "Save command? (y/n)",
-        };
-        let help = Paragraph::new(help_text)
-            .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(help, chunks[4]);
+                // Tags input
+                let mut tags_text = self.tags.join(", ");
+                if !tags_text.is_empty() {
+                    tags_text.push_str(", ");
+                }
+                tags_text.push_str(&self.current_tag);
+                if self.input_mode == InputMode::Tag {
+                    tags_text.push('│');
+                }
+                let tags_input = Paragraph::new(tags_text)
+                    .style(Style::default().fg(if self.input_mode == InputMode::Tag {
+                        Color::Yellow
+                    } else {
+                        Color::Gray
+                    }))
+                    .block(Block::default().borders(Borders::ALL).title("Tags"));
+                f.render_widget(tags_input, chunks[2]);
 
-        // Show suggested tags if in tag mode
-        if self.input_mode == InputMode::Tag && !self.suggested_tags.is_empty() {
-            let area = centered_rect(60, 30, f.size());
-            let suggested_tags = Paragraph::new(format!("Suggested tags:\n{}", self.suggested_tags.join(", ")))
-                .style(Style::default().fg(Color::Green))
-                .block(Block::default().borders(Borders::ALL).title("Suggestions"));
-            f.render_widget(Clear, area);
-            f.render_widget(suggested_tags, area);
+                // Exit code input
+                let exit_code_text = self.exit_code.map_or_else(String::new, |c| c.to_string());
+                let exit_code_input = Paragraph::new(format!(
+                    "{}\n{}",
+                    exit_code_text,
+                    if self.input_mode == InputMode::ExitCode { "│" } else { "" }
+                ))
+                .style(Style::default().fg(if self.input_mode == InputMode::ExitCode {
+                    Color::Yellow
+                } else {
+                    Color::Gray
+                }))
+                .block(Block::default().borders(Borders::ALL).title("Exit Code"));
+                f.render_widget(exit_code_input, chunks[3]);
+
+                // Help text or confirmation prompt
+                let help_text = match self.input_mode {
+                    InputMode::Command => "Press ? for help",
+                    InputMode::Tag => "Press ? for help",
+                    InputMode::ExitCode => "Press ? for help",
+                    InputMode::Confirm => "Save command? (y/n)",
+                    InputMode::Help => unreachable!(),
+                };
+                let help = Paragraph::new(help_text)
+                    .style(Style::default().fg(Color::White))
+                    .block(Block::default().borders(Borders::ALL));
+                f.render_widget(help, chunks[4]);
+            }
         }
     }
 
