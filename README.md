@@ -114,7 +114,7 @@ cargo build --release
 # The binary will be available in target/release/command-vault
 ```
 
-1. Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`):
+Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`):
    ```bash
    source "$(command-vault shell-init)"
    ```
@@ -152,15 +152,6 @@ Now you can use shorter commands:
 ```bash
 cv add 'echo Hello'
 cmdv ls
-```
-
-These commands can be easily retrieved later using tags:
-```bash
-# Find all docker-related commands
-cv search --tag docker
-
-# Find all cleanup commands
-cv search --tag cleanup
 ```
 
 ## License
