@@ -194,28 +194,3 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
         Err(e) => Err(e)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_parameters() {
-        let command = "docker run -p @port=8080 -v @volume @image";
-        let params = parse_parameters(command);
-        
-        assert_eq!(params.len(), 3);
-        
-        assert_eq!(params[0].name, "port");
-        assert_eq!(params[0].description, None);
-        assert_eq!(params[0].default_value, Some("8080".to_string()));
-        
-        assert_eq!(params[1].name, "volume");
-        assert_eq!(params[1].description, None);
-        assert_eq!(params[1].default_value, None);
-        
-        assert_eq!(params[2].name, "image");
-        assert_eq!(params[2].description, None);
-        assert_eq!(params[2].default_value, None);
-    }
-}

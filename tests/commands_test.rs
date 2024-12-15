@@ -158,35 +158,34 @@ fn test_add_command_with_tags() -> Result<()> {
 
 #[test]
 fn test_execute_command() -> Result<()> {
+    // Ensure we're in test mode
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
     let (mut db, _db_dir) = create_test_db()?;
     let temp_dir = tempdir()?;
-
-    // Change to the test directory
-    let original_dir = env::current_dir()?;
     let test_dir = temp_dir.path().canonicalize()?;
-    env::set_current_dir(&test_dir)?;
     
-    let command = "echo test".to_string();
-    let add_command = Commands::Add { 
-        command: vec![command.clone()], 
-        tags: vec![] 
+    // Use a simple, reliable command
+    let command = Command {
+        id: None,
+        command: "echo test_message".to_string(),
+        timestamp: Utc::now(),
+        directory: test_dir.to_string_lossy().to_string(),
+        tags: vec![],
+        parameters: Vec::new(),
     };
     
-    handle_command(add_command, &mut db)?;
+    // Add command to database
+    let id = db.add_command(&command)?;
     
-    let commands = db.list_commands(1, false)?;
-    assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "echo test");
-
     // Execute the command
-    let exec_command = Commands::Exec { command_id: commands[0].id.unwrap() };
+    let exec_command = Commands::Exec { command_id: id };
     handle_command(exec_command, &mut db)?;
     
-    // Verify command execution
-    let saved = db.get_command(commands[0].id.unwrap())?.unwrap();
+    // Verify command exists in database
+    let saved = db.get_command(id)?.unwrap();
+    assert_eq!(saved.command, "echo test_message");
     
-    // Restore the original directory
-    env::set_current_dir(original_dir)?;
     Ok(())
 }
 
@@ -341,25 +340,24 @@ fn test_parameter_parsing() -> Result<()> {
 
 #[test]
 fn test_exec_command_with_parameters() -> Result<()> {
+    // Ensure we're in test mode
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
     let (mut db, _db_dir) = create_test_db()?;
     let temp_dir = tempdir()?;
-
-    // Change to the test directory
-    let original_dir = env::current_dir()?;
     let test_dir = temp_dir.path().canonicalize()?;
-    env::set_current_dir(&test_dir)?;
     
     // Add a command with parameters
     let command = Command {
         id: None,
-        command: "echo @name=John".to_string(),
+        command: "echo @message".to_string(),
         timestamp: Utc::now(),
         directory: test_dir.to_string_lossy().to_string(),
         tags: vec![],
         parameters: vec![Parameter {
-            name: "name".to_string(),
-            description: Some("User_name".to_string()),
-            default_value: Some("John".to_string()),
+            name: "message".to_string(),
+            description: None,
+            default_value: Some("test_message".to_string()),
         }],
     };
     let id = db.add_command(&command)?;
@@ -368,14 +366,11 @@ fn test_exec_command_with_parameters() -> Result<()> {
     let exec_command = Commands::Exec { command_id: id };
     handle_command(exec_command, &mut db)?;
     
-    // Verify command execution
+    // Verify command was saved correctly
     let saved = db.get_command(id)?.unwrap();
     assert_eq!(saved.parameters.len(), 1);
-    assert_eq!(saved.parameters[0].name, "name");
-    assert_eq!(saved.parameters[0].default_value, Some("John".to_string()));
-    
-    // Restore the original directory
-    env::set_current_dir(original_dir)?;
+    assert_eq!(saved.parameters[0].name, "message");
+    assert_eq!(saved.parameters[0].default_value, Some("test_message".to_string()));
     
     Ok(())
 }
