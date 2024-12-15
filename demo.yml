@@ -1,0 +1,137 @@
+# The configurations that used for the recording, feel free to edit them
+config:
+
+  # Specify a command to be executed
+  # like `/bin/bash -l`, `ls`, or any other commands
+  # the default is bash for Linux
+  # or powershell.exe for Windows
+  command: bash -l
+  
+  # Specify the current working directory path
+  # the default is the current working directory path
+  cwd: /Users/ozan/Projects/command-vault
+  
+  # Export additional ENV variables
+  env:
+    recording: true
+  
+  # Explicitly set the number of columns
+  # or use `auto` to take the current
+  # number of columns of your shell
+  cols: 96
+  
+  # Explicitly set the number of rows
+  # or use `auto` to take the current
+  # number of rows of your shell
+  rows: 26
+  
+  # Amount of times to repeat GIF
+  # If value is -1, play once
+  # If value is 0, loop indefinitely
+  # If value is a positive number, loop n times
+  repeat: 0
+  
+  # Quality
+  # 1 - 100
+  quality: 100
+  
+  # Delay between frames in ms
+  # If the value is `auto` use the actual recording delays
+  frameDelay: auto
+  
+  # Maximum delay between frames in ms
+  # Ignored if the `frameDelay` isn't set to `auto`
+  # Set to `auto` to prevent limiting the max idle time
+  maxIdleTime: 2000
+  
+  # The surrounding frame box
+  # The `type` can be null, window, floating, or solid`
+  # To hide the title use the value null
+  # Don't forget to add a backgroundColor style with a null as type
+  frameBox:
+    type: floating
+    title: Terminalizer
+    style:
+      border: 0px black solid
+      # boxShadow: none
+      # margin: 0px
+  
+  # Add a watermark image to the rendered gif
+  # You need to specify an absolute path for
+  # the image on your machine or a URL, and you can also
+  # add your own CSS styles
+  watermark:
+    imagePath: null
+    style:
+      position: absolute
+      right: 15px
+      bottom: 15px
+      width: 100px
+      opacity: 0.9
+  
+  # Cursor style can be one of
+  # `block`, `underline`, or `bar`
+  cursorStyle: block
+  
+  # Font family
+  # You can use any font that is installed on your machine
+  # in CSS-like syntax
+  fontFamily: "Monaco, Lucida Console, Ubuntu Mono, Monospace"
+  
+  # The size of the font
+  fontSize: 12
+  
+  # The height of lines
+  lineHeight: 1
+  
+  # The spacing between letters
+  letterSpacing: 0
+  
+  # Theme
+  theme:
+    background: "transparent"
+    foreground: "#afafaf"
+    cursor: "#c7c7c7"
+    black: "#232628"
+    red: "#fc4384"
+    green: "#b3e33b"
+    yellow: "#ffa727"
+    blue: "#75dff2"
+    magenta: "#ae89fe"
+    cyan: "#708387"
+    white: "#d5d5d0"
+    brightBlack: "#626566"
+    brightRed: "#ff7fac"
+    brightGreen: "#c8ed71"
+    brightYellow: "#ebdf86"
+    brightBlue: "#75dff2"
+    brightMagenta: "#ae89fe"
+    brightCyan: "#b1c6ca"
+    brightWhite: "#f9f9f4"
+  
+# Records, feel free to edit them
+records:
+  - delay: 238
+    content: "\r\nThe default interactive shell is now zsh.\r\nTo update your account to use zsh, please run `chsh -s /bin/zsh`.\r\nFor more details, please visit https://support.apple.com/kb/HT208050.\r\n\e[?1034hOzans-MacBook-Pro:command-vault ozan$ "
+  - delay: 11912
+    content: chsh -s /bin/zsh
+  - delay: 320
+    content: "\r\n"
+  - delay: 159
+    content: "Changing shell for ozan.\r\n"
+  - delay: 9
+    content: 'Password for ozan: '
+  - delay: 2893
+    content: "\r\n"
+  - delay: 183
+    content: "chsh: no changes made\r\nOzans-MacBook-Pro:command-vault ozan$ "
+  - delay: 9925
+    content: terminalizer record demo
+  - delay: 479
+    content: "\r\n"
+  - delay: 371
+    content: "innerError Error: Cannot find module '../build/Debug/pty.node'\r\nRequire stack:\r\n- /Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/prebuild-loader.js\r\n- /Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/unixTerminal.js\r\n- /Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/index.js\r\n- /Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/app.js\r\n- /Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/bin/app.js\r\n\e[90m    at Module._resolveFilename (node:internal/modules/cjs/loader:1077:15)\e[39m\r\n\e[90m    at Module._load (node:internal/modules/cjs/loader:922:27)\e[39m\r\n\e[90m    at Module.require (node:internal/modules/cjs/loader:1143:19)\e[39m\r\n\e[90m    at require (node:internal/modules/cjs/helpers:121:18)\e[39m\r\n    at Object.<anonymous> (/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/\e[4mterminalizer\e[24m/node_modules/\e[4m@homebridge\e[24m/node-pty-prebuilt-multiarch/lib/prebuild-loader.js:10:15)\r\n\e[90m    at Module._compile (node:internal/modules/cjs/loader:1256:14)\e[39m\r\n\e[90m    at Module._extensions..js (node:internal/modules/cjs/loader:1310:10)\e[39m\r\n\e[90m    at Module.load (node:internal/modules/cjs/loader:1119:32)\e[39m\r\n\e[90m    at Module._load (node:internal/modules/cjs/loader:960:12)\e[39m\r\n\e[90m    at Module.require (node:internal/modules/cjs/loader:1143:19)\e[39m {\r\n  code: \e[32m'MODULE_NOT_FOUND'\e[39m,\r\n  requireStack: [\r\n    \e[32m'/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/prebuild-loader.js'\e[39m,\r\n    \e[32m'/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/unixTerminal.js'\e[39m,\r\n    \e[32m'/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/index.js'\e[39m,\r\n    \e[32m'/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/app.js'\e[39m,\r\n    \e[32m'/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/bin/app.js'\e[39m\r\n  ]\r\n}\r\n/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/lib/prebuild-loader.js:15\r\n        throw outerError;\r\n        ^\r\n\r\nError: The module '/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/terminalizer/node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release/pty.node'\r\nwas compiled against a different Node.js version using\r\nNODE_MODULE_VERSION 127. This version of Node.js requires\r\nNODE_MODULE_VERSION 108. Please try re-compiling or re-installing\r\nthe module (for instance, using `npm rebuild` or `npm install`).\r\n\e[90m    at Module._extensions..node (node:internal/modules/cjs/loader:1340:18)\e[39m\r\n\e[90m    at Module.load (node:internal/modules/cjs/loader:1119:32)\e[39m\r\n\e[90m    at Module._load (node:internal/modules/cjs/loader:960:12)\e[39m\r\n\e[90m    at Module.require (node:internal/modules/cjs/loader:1143:19)\e[39m\r\n\e[90m    at require (node:internal/modules/cjs/helpers:121:18)\e[39m\r\n    at Object.<anonymous> (/Users/ozan/.nvm/versions/node/v22.12.0/lib/node_modules/\e[4mterminalizer\e[24m/node_modules/\e[4m@homebridge\e[24m/node-pty-prebuilt-multiarch/lib/prebuild-loader.js:6:11)\r\n\e[90m    at Module._compile (node:internal/modules/cjs/loader:1256:14)\e[39m\r\n\e[90m    at Module._extensions..js (node:internal/modules/cjs/loader:1310:10)\e[39m\r\n\e[90m    at Module.load (node:internal/modules/cjs/loader:1119:32)\e[39m\r\n\e[90m    at Module._load (node:internal/modules/cjs/loader:960:12)\e[39m {\r\n  code: \e[32m'ERR_DLOPEN_FAILED'\e[39m\r\n}\r\n\r\nNode.js v18.17.1\r\nOzans-MacBook-Pro:command-vault ozan$ "
+  - delay: 27550
+    content: "\r\nOzans-MacBook-Pro:command-vault ozan$ "
+  - delay: 1413
+    content: "logout\r\n"
