@@ -87,8 +87,8 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                 // Default value
                 stdout.queue(MoveTo(0, DEFAULT_LINE))?
                       .queue(Print(format!("{}: [{}]", 
-                          "Default value".green().bold(), 
-                          default_str.cyan()
+                          "Default value".dimmed(), 
+                          default_str.bright_black()
                       )))?;
 
                 // Input field
@@ -110,18 +110,18 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                 stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
                       .queue(Print("─".repeat(45).dimmed()))?;
 
-                // Command preview
+                // Command preview section with softer colors
                 stdout.queue(MoveTo(0, COMMAND_LINE))?
                       .queue(Print(format!("{}: {}", 
                           "Command to execute".blue().bold(), 
-                          preview_command.yellow()
+                          preview_command.green()
                       )))?;
 
-                // Working directory
+                // Working directory with softer colors
                 stdout.queue(MoveTo(0, WORKDIR_LINE))?
                       .queue(Print(format!("{}: {}", 
-                          "Working directory".green().bold(), 
-                          std::env::current_dir()?.to_string_lossy().cyan()
+                          "Working directory".cyan().bold(), 
+                          std::env::current_dir()?.to_string_lossy().white()
                       )))?;
 
                 // Position cursor at input
@@ -187,8 +187,8 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
     match result {
         Ok(cmd) => {
             // Final display
-            println!("\n{}: {}", "Command to execute".blue().bold(), cmd.yellow());
-            println!("{}: {}", "Working directory".green().bold(), std::env::current_dir()?.to_string_lossy().cyan());
+            println!("\n{}: {}", "Command to execute".blue().bold(), cmd.green());
+            println!("{}: {}", "Working directory".cyan().bold(), std::env::current_dir()?.to_string_lossy().white());
             Ok(cmd)
         }
         Err(e) => Err(e)
