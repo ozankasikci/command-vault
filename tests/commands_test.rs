@@ -1,8 +1,10 @@
 use anyhow::Result;
-use command_vault::cli::{self, args::Commands};
-use command_vault::db::Command;
+use chrono::{TimeZone, Utc};
+use command_vault::{
+    cli::{args::Commands, commands::handle_command},
+    db::Command,
+};
 use tempfile::tempdir;
-use chrono::{Utc, TimeZone};
 use std::env;
 
 mod test_utils;
@@ -136,7 +138,7 @@ fn test_add_command_with_tags() -> Result<()> {
         tags: vec!["tag1".to_string(), "tag2".to_string()] 
     };
     
-    cli::handle_command(add_command, &mut db)?;
+    handle_command(add_command, &mut db)?;
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
@@ -166,7 +168,7 @@ fn test_execute_command() -> Result<()> {
         tags: vec![] 
     };
     
-    cli::handle_command(add_command, &mut db)?;
+    handle_command(add_command, &mut db)?;
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
@@ -190,7 +192,7 @@ fn test_empty_command_validation() -> Result<()> {
         tags: vec![] 
     };
     
-    let result = cli::handle_command(add_command, &mut db);
+    let result = handle_command(add_command, &mut db);
     assert!(result.is_err());
     
     Ok(())
@@ -208,7 +210,7 @@ fn test_command_with_output() -> Result<()> {
         tags: vec![] 
     };
     
-    cli::handle_command(add_command, &mut db)?;
+    handle_command(add_command, &mut db)?;
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
@@ -233,7 +235,7 @@ fn test_command_with_stderr() -> Result<()> {
         tags: vec![] 
     };
     
-    cli::handle_command(add_command, &mut db)?;
+    handle_command(add_command, &mut db)?;
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use command_vault::cli::args::Cli;
-use command_vault::cli::handle_command;
+use command_vault::cli::commands::handle_command;
 use command_vault::db::Database;
 use std::path::PathBuf;
 

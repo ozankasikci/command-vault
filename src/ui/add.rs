@@ -1,4 +1,4 @@
-use std::io::{self, Stdout};
+use std::io::Stdout;
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -13,58 +13,60 @@ use ratatui::{
     Terminal,
 };
 
+/// Type alias for the command result tuple
+pub type CommandResult = Option<(String, Vec<String>, Option<i32>)>;
+
+#[derive(Default)]
 pub struct AddCommandApp {
+    /// The command being entered
     command: String,
+    /// Tags for the command
     tags: Vec<String>,
+    /// Current tag being entered
     current_tag: String,
+    /// Exit code for the command
     exit_code: Option<i32>,
-    cursor_position: usize,
-    mode: Mode,
+    /// Current input mode
+    input_mode: InputMode,
+    /// Suggested tags
     suggested_tags: Vec<String>,
-    message: Option<String>,
+    /// Cursor position
+    cursor_position: usize,
 }
 
-#[derive(PartialEq)]
-enum Mode {
+#[derive(Default, PartialEq)]
+enum InputMode {
+    #[default]
     Command,
-    Tags,
+    Tag,
     ExitCode,
     Confirm,
 }
 
 impl AddCommandApp {
     pub fn new() -> Self {
-        Self {
-            command: String::new(),
-            tags: Vec::new(),
-            current_tag: String::new(),
-            exit_code: None,
-            cursor_position: 0,
-            mode: Mode::Command,
-            suggested_tags: Vec::new(),
-            message: None,
-        }
+        Self::default()
     }
 
-    pub fn run(&mut self) -> Result<Option<(String, Vec<String>, Option<i32>)>> {
+    pub fn run(&mut self) -> Result<CommandResult> {
         let mut terminal = setup_terminal()?;
         let result = self.run_app(&mut terminal);
         restore_terminal(&mut terminal)?;
         result
     }
 
-    fn run_app(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<Option<(String, Vec<String>, Option<i32>)>> {
+    fn run_app(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<CommandResult> {
         loop {
             terminal.draw(|f| self.ui(f))?;
 
             if let Event::Key(key) = event::read()? {
-                match self.mode {
-                    Mode::Command => {
+                match self.input_mode {
+                    InputMode::Command => {
                         match key.code {
                             KeyCode::Enter => {
                                 if !self.command.is_empty() {
                                     self.suggest_tags();
-                                    self.mode = Mode::Tags;
+                                    self.input_mode = InputMode::Tag;
                                 }
                             }
                             KeyCode::Char(c) => {
@@ -93,14 +95,14 @@ impl AddCommandApp {
                             _ => {}
                         }
                     }
-                    Mode::Tags => {
+                    InputMode::Tag => {
                         match key.code {
                             KeyCode::Enter => {
                                 if !self.current_tag.is_empty() {
                                     self.tags.push(self.current_tag.clone());
                                     self.current_tag.clear();
                                 } else {
-                                    self.mode = Mode::ExitCode;
+                                    self.input_mode = InputMode::ExitCode;
                                 }
                             }
                             KeyCode::Char(c) => {
@@ -116,15 +118,15 @@ impl AddCommandApp {
                                 }
                             }
                             KeyCode::Esc => {
-                                self.mode = Mode::Command;
+                                self.input_mode = InputMode::Command;
                             }
                             _ => {}
                         }
                     }
-                    Mode::ExitCode => {
+                    InputMode::ExitCode => {
                         match key.code {
                             KeyCode::Enter => {
-                                self.mode = Mode::Confirm;
+                                self.input_mode = InputMode::Confirm;
                             }
                             KeyCode::Char(c) if c.is_ascii_digit() => {
                                 let digit = c.to_digit(10).unwrap() as i32;
@@ -139,12 +141,12 @@ impl AddCommandApp {
                                 }
                             }
                             KeyCode::Esc => {
-                                self.mode = Mode::Tags;
+                                self.input_mode = InputMode::Tag;
                             }
                             _ => {}
                         }
                     }
-                    Mode::Confirm => {
+                    InputMode::Confirm => {
                         match key.code {
                             KeyCode::Char('y') => {
                                 return Ok(Some((
@@ -200,9 +202,9 @@ impl AddCommandApp {
         let command_input = Paragraph::new(format!(
             "{}\n{}",
             self.command,
-            if self.mode == Mode::Command { "│" } else { "" }
+            if self.input_mode == InputMode::Command { "│" } else { "" }
         ))
-        .style(Style::default().fg(if self.mode == Mode::Command { Color::Yellow } else { Color::Gray }))
+        .style(Style::default().fg(if self.input_mode == InputMode::Command { Color::Yellow } else { Color::Gray }))
         .block(Block::default().borders(Borders::ALL).title("Command"));
         f.render_widget(command_input, chunks[1]);
 
@@ -212,11 +214,11 @@ impl AddCommandApp {
             tags_text.push_str(", ");
         }
         tags_text.push_str(&self.current_tag);
-        if self.mode == Mode::Tags {
+        if self.input_mode == InputMode::Tag {
             tags_text.push('│');
         }
         let tags_input = Paragraph::new(tags_text)
-            .style(Style::default().fg(if self.mode == Mode::Tags { Color::Yellow } else { Color::Gray }))
+            .style(Style::default().fg(if self.input_mode == InputMode::Tag { Color::Yellow } else { Color::Gray }))
             .block(Block::default().borders(Borders::ALL).title("Tags"));
         f.render_widget(tags_input, chunks[2]);
 
@@ -225,18 +227,18 @@ impl AddCommandApp {
         let exit_code_input = Paragraph::new(format!(
             "{}\n{}",
             exit_code_text,
-            if self.mode == Mode::ExitCode { "│" } else { "" }
+            if self.input_mode == InputMode::ExitCode { "│" } else { "" }
         ))
-        .style(Style::default().fg(if self.mode == Mode::ExitCode { Color::Yellow } else { Color::Gray }))
+        .style(Style::default().fg(if self.input_mode == InputMode::ExitCode { Color::Yellow } else { Color::Gray }))
         .block(Block::default().borders(Borders::ALL).title("Exit Code"));
         f.render_widget(exit_code_input, chunks[3]);
 
         // Help text or confirmation prompt
-        let help_text = match self.mode {
-            Mode::Command => "Enter command (Enter to continue, Esc to cancel)",
-            Mode::Tags => "Enter tags (Enter when done, Tab for suggestions, Esc to go back)",
-            Mode::ExitCode => "Enter exit code (Enter to continue, Esc to go back)",
-            Mode::Confirm => "Save command? (y/n)",
+        let help_text = match self.input_mode {
+            InputMode::Command => "Enter command (Enter to continue, Esc to cancel)",
+            InputMode::Tag => "Enter tags (Enter when done, Tab for suggestions, Esc to go back)",
+            InputMode::ExitCode => "Enter exit code (Enter to continue, Esc to go back)",
+            InputMode::Confirm => "Save command? (y/n)",
         };
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
@@ -244,7 +246,7 @@ impl AddCommandApp {
         f.render_widget(help, chunks[4]);
 
         // Show suggested tags if in tag mode
-        if self.mode == Mode::Tags && !self.suggested_tags.is_empty() {
+        if self.input_mode == InputMode::Tag && !self.suggested_tags.is_empty() {
             let area = centered_rect(60, 30, f.size());
             let suggested_tags = Paragraph::new(format!("Suggested tags:\n{}", self.suggested_tags.join(", ")))
                 .style(Style::default().fg(Color::Green))
@@ -288,7 +290,7 @@ impl AddCommandApp {
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
+    let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;

@@ -98,7 +98,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 return Err(anyhow!("Cannot add empty command"));
             }
 
-            let (final_exit_code, output) = if cfg!(test) {
+            let (final_exit_code, _output) = if cfg!(test) {
                 // In test mode, don't actually execute the command
                 // Use the provided exit code or default to 0
                 (exit_code.unwrap_or(0), String::new())
