@@ -17,12 +17,39 @@ An advanced command history manager that helps you track and search your shell c
 
 ## Installation
 
-1. Build from source:
-   ```bash
-   cargo build --release
-   ```
+### From Releases
 
-2. Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`):
+You can download the latest release for your platform from the [releases page](https://github.com/yourusername/command-vault/releases).
+
+#### Linux and macOS
+```bash
+# Download the latest release (replace X.Y.Z with the version number)
+curl -LO https://github.com/yourusername/command-vault/releases/download/vX.Y.Z/command-vault-linux-amd64
+# Make it executable
+chmod +x command-vault-linux-amd64
+# Move it to your PATH
+sudo mv command-vault-linux-amd64 /usr/local/bin/command-vault
+```
+
+#### Windows
+Download the Windows executable from the releases page and add it to your PATH.
+
+### Building from Source
+
+If you prefer to build from source, you'll need Rust installed on your system:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/command-vault.git
+cd command-vault
+
+# Build the project
+cargo build --release
+
+# The binary will be available in target/release/command-vault
+```
+
+1. Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`):
    ```bash
    source "$(command-vault shell-init)"
    ```
@@ -63,19 +90,6 @@ In TUI mode, you can:
 - Add new commands with tags
 - View command details including exit codes and timestamps
 - Delete commands
-
-## Project Structure
-
-```
-src/
-├── cli/        # Command-line interface implementation
-├── db/         # Database operations and models
-├── shell/      # Shell integration and hooks
-├── ui/         # Terminal User Interface components
-├── utils/      # Utility functions
-├── lib.rs      # Library interface
-└── main.rs     # Application entry point
-```
 
 ## Development
 
