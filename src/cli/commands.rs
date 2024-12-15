@@ -121,8 +121,12 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             if command_str.trim().is_empty() {
                 return Err(anyhow!("Cannot add empty command"));
             }
-
-            let directory = std::env::current_dir()?.canonicalize()?.to_string_lossy().into_owned();
+            
+            // Get the current directory
+            let directory = std::env::current_dir()?
+                .to_string_lossy()
+                .to_string();
+            
             let timestamp = Local::now().with_timezone(&Utc);
             
             // Parse parameters from command string
@@ -224,6 +228,11 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
         Commands::Exec { command_id } => {
             let command = db.get_command(command_id)?
                 .ok_or_else(|| anyhow!("Command not found with ID: {}", command_id))?;
+            
+            // Create the directory if it doesn't exist
+            if !std::path::Path::new(&command.directory).exists() {
+                std::fs::create_dir_all(&command.directory)?;
+            }
             
             // If command has parameters, substitute them with user input
             let final_command = if !command.parameters.is_empty() {
