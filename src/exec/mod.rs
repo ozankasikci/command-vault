@@ -33,19 +33,23 @@ pub fn execute_command(command: &Command) -> Result<()> {
                     .map_err(|e| anyhow::anyhow!("Failed to get input: {}", e))?
             };
 
-            // Properly escape the value for shell
-            let escaped_value = escape(std::borrow::Cow::from(&value)).to_string();
-            
-            // Replace parameter in command string
-            final_command = final_command.replace(&format!("${{{}}}", param.name), &escaped_value);
-            final_command = final_command.replace(&format!("${{{}:{}}}", param.name, param.description.as_ref().unwrap_or(&String::new())), &escaped_value);
-            if let Some(desc) = &param.description {
-                final_command = final_command.replace(&format!("${{{}:{}={}}}", param.name, desc, param.default_value.as_ref().unwrap_or(&String::new())), &escaped_value);
-            }
+            // Replace parameter in command string with properly quoted value if it contains spaces
+            let quoted_value = if value.contains(' ') {
+                format!("'{}'", value.replace("'", "'\\''"))
+            } else {
+                value.clone()
+            };
 
             if debug {
                 eprintln!("DEBUG: Parameter value: {}", &value);
-                eprintln!("DEBUG: Escaped value: {}", &escaped_value);
+                eprintln!("DEBUG: Quoted value: {}", &quoted_value);
+            }
+
+            // Replace parameter in command string
+            final_command = final_command.replace(&format!("${{{}}}", param.name), &quoted_value);
+            final_command = final_command.replace(&format!("${{{}:{}}}", param.name, param.description.as_ref().unwrap_or(&String::new())), &quoted_value);
+            if let Some(desc) = &param.description {
+                final_command = final_command.replace(&format!("${{{}:{}={}}}", param.name, desc, param.default_value.as_ref().unwrap_or(&String::new())), &quoted_value);
             }
 
             if debug {

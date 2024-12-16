@@ -111,8 +111,9 @@ impl<'a> App<'a> {
 
                                     // Execute the command through the shell's functions and aliases
                                     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", &final_command);
                                     let output = std::process::Command::new(&shell)
-                                        .args(&["-l", "-i", "-c", &final_command])
+                                        .args(&["-c", &wrapped_command])
                                         .current_dir(&cmd.directory)
                                         .env("SHELL", &shell)
                                         .envs(std::env::vars())
