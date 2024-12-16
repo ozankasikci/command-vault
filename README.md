@@ -36,8 +36,24 @@ Command Vault is a command manager for storing, and executing your complex comma
 # Add a command with tags
 command-vault add --tags git,deploy git push origin main
 command-vault add echo "Hello, world!"
+
+# Add a command with parameters
+command-vault add "git commit -m @message:Commit message"
+command-vault add "curl -X POST @url:API endpoint -d @data:JSON payload"
 ```
 ![Add Command](demo/add-command3.gif)
+
+### Parameters
+You can add dynamic parameters to your commands using the `@parameter` syntax:
+- Simple parameter: `@name`
+
+Examples:
+```bash
+# Git commit with message parameter
+git commit -m "@message"
+```
+
+When executing a command with parameters, Command Vault will prompt you to enter values for each parameter.
 
 ### Search Commands
 ```bash
