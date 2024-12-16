@@ -1,0 +1,33 @@
+name: Coverage
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Coverage
+    runs-on: ubuntu-latest
+    container:
+      image: xd009642/tarpaulin
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Generate code coverage
+        run: |
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Xml --output-dir ./coverage
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./coverage/cobertura.xml
+          fail_ci_if_error: true

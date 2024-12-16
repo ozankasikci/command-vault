@@ -2,6 +2,7 @@
 [![Crates.io](https://img.shields.io/crates/v/command-vault.svg?style=flat-square)](https://crates.io/crates/command-vault)
 [![Documentation](https://docs.rs/command-vault/badge.svg)](https://docs.rs/command-vault)
 ![example workflow](https://github.com/ozankasikci/command-vault/actions/workflows/test.yml/badge.svg)
+[![codecov](https://codecov.io/gh/ozankasikci/command-vault/branch/main/graph/badge.svg)](https://codecov.io/gh/ozankasikci/command-vault)
 
 Command Vault is a command manager for storing, and executing your complex commands. It provides a user-friendly interface to search, list, and delete commands, as well as tag commands for better organization.
 
@@ -140,13 +141,18 @@ Add the following to your shell's configuration file (`~/.bashrc` or `~/.zshrc`)
 
 ## Development
 
-Requirements:
-- Rust 1.70 or higher
-- SQLite 3.x
-
-Run tests:
+### Running Tests
 ```bash
 cargo test
+```
+
+### Code Coverage
+```bash
+# Generate coverage report (requires cargo-tarpaulin)
+./scripts/coverage.sh
+
+# View the report in your browser
+open coverage/tarpaulin-report.html
 ```
 
 ## Shell Aliases
