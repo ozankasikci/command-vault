@@ -24,7 +24,7 @@ pub enum Commands {
         tags: Vec<String>,
     },
     
-    /// Execute a command from history
+    /// Execute a command by id (in the current shell)
     Exec {
         /// Command ID to execute
         command_id: i64,

@@ -259,13 +259,16 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command.command.clone()
             };
             
-            // Execute the command
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(&final_command)
+            // Execute the command through the shell's functions and aliases
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+            let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", &final_command);
+            let output = std::process::Command::new(&shell)
+                .args(&["-c", &wrapped_command])
                 .current_dir(&command.directory)
-                .env("CARGO_TERM_COLOR", "always")  // Force cargo to use colors
-                .env("RUST_BACKTRACE", "1")  // Also enable colored backtraces
+                .env("CARGO_TERM_COLOR", "always")
+                .env("RUST_BACKTRACE", "1")
+                .env("SHELL", &shell)
+                .envs(std::env::vars())
                 .output()?;
 
             // Only print the actual command output
