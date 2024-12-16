@@ -34,6 +34,9 @@ case $VERSION_TYPE in
         # Bump version using cargo-set-version
         cargo set-version --bump $VERSION_TYPE
         
+        # Update README.md with new version
+        ./scripts/update_version.sh
+
         # Get new version
         NEW_VERSION=$(grep "^version" Cargo.toml | sed 's/version = "\(.*\)"/\1/')
         echo "New version: $NEW_VERSION"
