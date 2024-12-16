@@ -31,12 +31,24 @@ pub fn execute_command(command: &Command) -> Result<()> {
                     .map_err(|e| anyhow::anyhow!("Failed to get input: {}", e))?
             };
 
+            // Replace parameter in command string with properly quoted value if it contains spaces
+            let quoted_value = if value.contains(' ') {
+                format!("'{}'", value.replace("'", "'\\''"))
+            } else {
+                value.clone()
+            };
+
+            eprintln!("DEBUG: Parameter value: {}", &value);
+            eprintln!("DEBUG: Quoted value: {}", &quoted_value);
+
             // Replace parameter in command string
-            final_command = final_command.replace(&format!("${{{}}}", param.name), &value);
-            final_command = final_command.replace(&format!("${{{}:{}}}", param.name, param.description.as_ref().unwrap_or(&String::new())), &value);
+            final_command = final_command.replace(&format!("${{{}}}", param.name), &quoted_value);
+            final_command = final_command.replace(&format!("${{{}:{}}}", param.name, param.description.as_ref().unwrap_or(&String::new())), &quoted_value);
             if let Some(desc) = &param.description {
-                final_command = final_command.replace(&format!("${{{}:{}={}}}", param.name, desc, param.default_value.as_ref().unwrap_or(&String::new())), &value);
+                final_command = final_command.replace(&format!("${{{}:{}={}}}", param.name, desc, param.default_value.as_ref().unwrap_or(&String::new())), &quoted_value);
             }
+
+            eprintln!("DEBUG: Command after replacement: {}", final_command);
         }
 
         // Show preview and confirm
@@ -54,11 +66,20 @@ pub fn execute_command(command: &Command) -> Result<()> {
         }
     }
 
-    // Execute the command
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&final_command)
+    // Execute the command through the shell's functions and aliases
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    
+    eprintln!("DEBUG: Final command to execute: {}", final_command);
+    eprintln!("DEBUG: Shell being used: {}", shell);
+    
+    let output = std::process::Command::new(&shell)
+        .args(&["-l", "-i", "-c", &final_command])
+        .current_dir(&command.directory)
+        .env("SHELL", &shell)
+        .envs(std::env::vars())
         .output()?;
+
+    eprintln!("DEBUG: Command args: {:?}", &["-l", "-i", "-c", &final_command]);
 
     io::stdout().write_all(&output.stdout)?;
     io::stderr().write_all(&output.stderr)?;

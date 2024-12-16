@@ -1,4 +1,4 @@
-use std::io::{self, Stdout};
+use std::io::{self, Write, Stdout};
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -109,33 +109,20 @@ impl<'a> App<'a> {
                                         cmd.command.clone()
                                     };
 
-                                    // Execute the command
-                                    let output = std::process::Command::new("sh")
-                                        .arg("-c")
-                                        .arg(&final_command)
+                                    // Execute the command through the shell's functions and aliases
+                                    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", &final_command);
+                                    let output = std::process::Command::new(&shell)
+                                        .args(&["-c", &wrapped_command])
                                         .current_dir(&cmd.directory)
-                                        .env("CARGO_TERM_COLOR", "always")  // Force cargo to use colors
-                                        .env("RUST_BACKTRACE", "1")  // Also enable colored backtraces
-                                        .output();
+                                        .env("SHELL", &shell)
+                                        .envs(std::env::vars())
+                                        .output()?;
 
-                                    match output {
-                                        Ok(output) => {
-                                            // Only print the actual command output
-                                            if !output.stdout.is_empty() {
-                                                print!("{}", String::from_utf8_lossy(&output.stdout));
-                                            }
-                                            if !output.stderr.is_empty() {
-                                                eprint!("{}", String::from_utf8_lossy(&output.stderr));
-                                            }
-                                            return Ok(());
-                                        }
-                                        Err(e) => {
-                                            // Re-enable TUI and show error
-                                            setup_terminal()?;
-                                            self.message = Some((format!("Failed to execute command: {}", e), Color::Red));
-                                            continue;
-                                        }
-                                    }
+                                    io::stdout().write_all(&output.stdout)?;
+                                    io::stderr().write_all(&output.stderr)?;
+                                    
+                                    return Ok(());
                                 }
                             }
                         }
