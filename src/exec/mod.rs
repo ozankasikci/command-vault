@@ -5,13 +5,19 @@ use dialoguer::{Input, theme::ColorfulTheme};
 use colored::*;
 use shell_escape::escape;
 
+#[cfg(test)]
+mod tests;
+
 pub fn execute_command(command: &Command) -> Result<()> {
     let debug = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
+    let test_mode = std::env::var("COMMAND_VAULT_TEST").is_ok();
     let mut final_command = command.command.clone();
 
     // If command has parameters, prompt for values
     if !command.parameters.is_empty() {
-        println!("Enter parameters for command:");
+        if !test_mode {
+            println!("Enter parameters for command:");
+        }
         for param in &command.parameters {
             let prompt = match (&param.description, &param.default_value) {
                 (Some(desc), Some(default)) => format!("{} ({}) [{}]", param.name, desc, default),
@@ -20,7 +26,9 @@ pub fn execute_command(command: &Command) -> Result<()> {
                 (None, None) => param.name.clone(),
             };
 
-            let value: String = if let Some(default) = &param.default_value {
+            let value: String = if test_mode {
+                param.default_value.clone().unwrap_or_else(|| "test_value".to_string())
+            } else if let Some(default) = &param.default_value {
                 Input::with_theme(&ColorfulTheme::default())
                     .with_prompt(&prompt)
                     .default(default.clone())
@@ -46,10 +54,12 @@ pub fn execute_command(command: &Command) -> Result<()> {
             }
 
             // Replace parameter in command string
-            final_command = final_command.replace(&format!("${{{}}}", param.name), &quoted_value);
-            final_command = final_command.replace(&format!("${{{}:{}}}", param.name, param.description.as_ref().unwrap_or(&String::new())), &quoted_value);
+            final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
             if let Some(desc) = &param.description {
-                final_command = final_command.replace(&format!("${{{}:{}={}}}", param.name, desc, param.default_value.as_ref().unwrap_or(&String::new())), &quoted_value);
+                final_command = final_command.replace(&format!("@{}:{}", param.name, desc), &quoted_value);
+                if let Some(default) = &param.default_value {
+                    final_command = final_command.replace(&format!("@{}:{}={}", param.name, desc, default), &quoted_value);
+                }
             }
 
             if debug {
@@ -58,17 +68,19 @@ pub fn execute_command(command: &Command) -> Result<()> {
         }
 
         // Show preview and confirm
-        println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
-        println!("{}: {}", "Working directory".green().bold(), command.directory.cyan());
-        println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
-        print!("\n");
-        io::stdout().flush()?;
+        if !test_mode {
+            println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
+            println!("{}: {}", "Working directory".green().bold(), command.directory.cyan());
+            println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
+            print!("\n");
+            io::stdout().flush()?;
 
-        let mut response = String::new();
-        io::stdin().read_line(&mut response)?;
-        if response.trim().to_lowercase() == "n" {
-            println!("Aborted.");
-            return Ok(());
+            let mut response = String::new();
+            io::stdin().read_line(&mut response)?;
+            if response.trim().to_lowercase() == "n" {
+                println!("Aborted.");
+                return Ok(());
+            }
         }
     }
 
