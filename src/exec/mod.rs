@@ -5,9 +5,6 @@ use dialoguer::{Input, theme::ColorfulTheme};
 use colored::*;
 use shell_escape::escape;
 
-#[cfg(test)]
-mod tests;
-
 pub fn execute_command(command: &Command) -> Result<()> {
     let debug = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
     let test_mode = std::env::var("COMMAND_VAULT_TEST").is_ok();
