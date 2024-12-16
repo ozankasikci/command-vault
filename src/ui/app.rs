@@ -111,7 +111,7 @@ impl<'a> App<'a> {
 
                                     // Execute the command through the shell's functions and aliases
                                     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", &final_command);
+                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", final_command.replace("\"", "\\\""));
                                     let output = std::process::Command::new(&shell)
                                         .args(&["-c", &wrapped_command])
                                         .current_dir(&cmd.directory)
@@ -174,11 +174,11 @@ impl<'a> App<'a> {
                                             // Update command
                                             let updated_cmd = Command {
                                                 id: cmd.id,
-                                                command: new_command,
+                                                command: new_command.clone(),
                                                 timestamp: cmd.timestamp,
                                                 directory: cmd.directory.clone(),
                                                 tags: new_tags,
-                                                parameters: cmd.parameters.clone(),
+                                                parameters: crate::utils::params::parse_parameters(&new_command),
                                             };
                                             
                                             if let Err(e) = self.db.update_command(&updated_cmd) {
