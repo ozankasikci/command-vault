@@ -25,9 +25,11 @@ jobs:
           cargo tarpaulin --verbose --workspace --timeout 120 --out Xml --output-dir ./coverage
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/cobertura.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
+          verbose: true
+          retry_max_attempts: 3
+          retry_delay_seconds: 30
+          token: ${{ secrets.CODECOV_TOKEN }}
