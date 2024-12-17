@@ -27,9 +27,9 @@ pub fn get_bash_integration_path() -> PathBuf {
 pub fn detect_current_shell() -> Option<String> {
     if let Ok(shell) = env::var("SHELL") {
         let shell_lower = shell.to_lowercase();
-        if shell_lower.contains("zsh") {
+        if shell_lower.contains("zsh") || shell_lower.ends_with("/zsh") {
             Some("zsh".to_string())
-        } else if shell_lower.contains("bash") {
+        } else if shell_lower.contains("bash") || shell_lower.ends_with("/bash") {
             Some("bash".to_string())
         } else {
             None
