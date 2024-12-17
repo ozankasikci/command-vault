@@ -7,7 +7,6 @@ use shell_escape::escape;
 use std::borrow::Cow;
 
 pub fn execute_command(command: &Command) -> Result<()> {
-    let debug = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
     let test_mode = std::env::var("COMMAND_VAULT_TEST").is_ok();
     let mut final_command = command.command.clone();
 
@@ -46,11 +45,6 @@ pub fn execute_command(command: &Command) -> Result<()> {
                 value.clone()
             };
 
-            if debug {
-                eprintln!("DEBUG: Parameter value: {}", &value);
-                eprintln!("DEBUG: Quoted value: {}", &quoted_value);
-            }
-
             // Replace parameter in command string
             final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
             if let Some(desc) = &param.description {
@@ -60,24 +54,20 @@ pub fn execute_command(command: &Command) -> Result<()> {
                 }
             }
 
-            if debug {
-                eprintln!("DEBUG: Command after replacement: {}", final_command);
-            }
-        }
+            // Show preview and confirm
+            if !test_mode {
+                println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
+                println!("{}: {}", "Working directory".green().bold(), command.directory.cyan());
+                println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
+                print!("\n");
+                io::stdout().flush()?;
 
-        // Show preview and confirm
-        if !test_mode {
-            println!("\n{}: {}", "Command to execute".blue().bold(), final_command.yellow());
-            println!("{}: {}", "Working directory".green().bold(), command.directory.cyan());
-            println!("{}", "Press Enter to continue or Ctrl+C to cancel...".dimmed());
-            print!("\n");
-            io::stdout().flush()?;
-
-            let mut response = String::new();
-            io::stdin().read_line(&mut response)?;
-            if response.trim().to_lowercase() == "n" {
-                println!("Aborted.");
-                return Ok(());
+                let mut response = String::new();
+                io::stdin().read_line(&mut response)?;
+                if response.trim().to_lowercase() == "n" {
+                    println!("Aborted.");
+                    return Ok(());
+                }
             }
         }
     }
@@ -85,19 +75,7 @@ pub fn execute_command(command: &Command) -> Result<()> {
     // Execute the command through the shell's functions and aliases
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     
-    if debug {
-        eprintln!("DEBUG: Final command to execute: {}", final_command);
-        eprintln!("DEBUG: Shell being used: {}", shell);
-    }
-    
-    // Always log these for debugging
-    eprintln!("EXEC: Original command: {}", command.command);
-    eprintln!("EXEC: Final command: {}", final_command);
-    eprintln!("EXEC: Working directory: {}", command.directory);
-    
     let wrapped_command = format!(". ~/.zshrc 2>/dev/null && {}", final_command);
-    eprintln!("EXEC: Wrapped command: {}", wrapped_command);
-    eprintln!("EXEC: Command args: {:?}", ["-l", "-i", "-c", &wrapped_command]);
 
     let output = std::process::Command::new(&shell)
         .args(&["-l", "-i", "-c", &wrapped_command])
@@ -105,9 +83,6 @@ pub fn execute_command(command: &Command) -> Result<()> {
         .env("SHELL", &shell)
         .envs(std::env::vars())
         .output()?;
-
-    eprintln!("EXEC: Command stdout: {}", String::from_utf8_lossy(&output.stdout));
-    eprintln!("EXEC: Command stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     io::stdout().write_all(&output.stdout)?;
     io::stderr().write_all(&output.stderr)?;
