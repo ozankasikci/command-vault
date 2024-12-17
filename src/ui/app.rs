@@ -14,6 +14,8 @@ use ratatui::{
     Terminal,
 };
 use colored::*;
+use shell_escape::escape;
+use std::borrow::Cow;
 
 use crate::db::{Command, Database};
 use crate::ui::AddCommandApp;
@@ -111,13 +113,25 @@ impl<'a> App<'a> {
 
                                     // Execute the command through the shell's functions and aliases
                                     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null; eval \"{}\"", final_command.replace("\"", "\\\""));
+                                    
+                                    // Log command execution details
+                                    eprintln!("UI: Original command: {}", cmd.command);
+                                    eprintln!("UI: Final command: {}", final_command);
+                                    eprintln!("UI: Working directory: {}", cmd.directory);
+                                    
+                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null && {}", final_command);
+                                    eprintln!("UI: Wrapped command: {}", wrapped_command);
+                                    eprintln!("UI: Command args: {:?}", ["-c", &wrapped_command]);
+                                    
                                     let output = std::process::Command::new(&shell)
                                         .args(&["-c", &wrapped_command])
                                         .current_dir(&cmd.directory)
                                         .env("SHELL", &shell)
                                         .envs(std::env::vars())
                                         .output()?;
+
+                                    eprintln!("UI: Command stdout: {}", String::from_utf8_lossy(&output.stdout));
+                                    eprintln!("UI: Command stderr: {}", String::from_utf8_lossy(&output.stderr));
 
                                     io::stdout().write_all(&output.stdout)?;
                                     io::stderr().write_all(&output.stderr)?;

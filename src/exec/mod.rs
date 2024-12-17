@@ -4,6 +4,7 @@ use crate::db::models::Command;
 use dialoguer::{Input, theme::ColorfulTheme};
 use colored::*;
 use shell_escape::escape;
+use std::borrow::Cow;
 
 pub fn execute_command(command: &Command) -> Result<()> {
     let debug = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
@@ -89,16 +90,24 @@ pub fn execute_command(command: &Command) -> Result<()> {
         eprintln!("DEBUG: Shell being used: {}", shell);
     }
     
+    // Always log these for debugging
+    eprintln!("EXEC: Original command: {}", command.command);
+    eprintln!("EXEC: Final command: {}", final_command);
+    eprintln!("EXEC: Working directory: {}", command.directory);
+    
+    let wrapped_command = format!(". ~/.zshrc 2>/dev/null && {}", final_command);
+    eprintln!("EXEC: Wrapped command: {}", wrapped_command);
+    eprintln!("EXEC: Command args: {:?}", ["-l", "-i", "-c", &wrapped_command]);
+
     let output = std::process::Command::new(&shell)
-        .args(&["-l", "-i", "-c", &final_command])
+        .args(&["-l", "-i", "-c", &wrapped_command])
         .current_dir(&command.directory)
         .env("SHELL", &shell)
         .envs(std::env::vars())
         .output()?;
 
-    if debug {
-        eprintln!("DEBUG: Command args: {:?}", &["-l", "-i", "-c", &final_command]);
-    }
+    eprintln!("EXEC: Command stdout: {}", String::from_utf8_lossy(&output.stdout));
+    eprintln!("EXEC: Command stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     io::stdout().write_all(&output.stdout)?;
     io::stderr().write_all(&output.stderr)?;
