@@ -98,25 +98,32 @@ fn test_init_shell() -> Result<()> {
     let path = init_shell(Some("zsh".to_string()))?;
     assert!(path.ends_with("zsh-integration.zsh"));
 
-    // Test with environment detection - bash
-    env::set_var("SHELL", "/usr/bin/bash");
+    // Test with environment detection - bash with full path
+    env::set_var("SHELL", "/usr/local/bin/bash");
     let path = init_shell(None)?;
     assert!(path.ends_with("bash-integration.sh"));
 
-    // Test with environment detection - bash (different path)
-    env::set_var("SHELL", "/bin/bash");
+    // Test with environment detection - bash with relative path
+    env::set_var("SHELL", "bash");
     let path = init_shell(None)?;
     assert!(path.ends_with("bash-integration.sh"));
+
+    // Test with environment detection - zsh
+    env::set_var("SHELL", "/bin/zsh");
+    let path = init_shell(None)?;
+    assert!(path.ends_with("zsh-integration.zsh"));
 
     // Test error case - unknown shell
     env::set_var("SHELL", "/bin/fish");
     let result = init_shell(None);
     assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Could not detect shell"));
 
     // Test error case - no shell env var
     env::remove_var("SHELL");
     let result = init_shell(None);
     assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Could not detect shell"));
 
     // Restore original shell env var
     if let Some(shell) = original_shell {
