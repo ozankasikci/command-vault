@@ -19,6 +19,8 @@ use crate::db::{Command, Database};
 use crate::ui::App;
 use crate::utils::params::parse_parameters;
 use super::args::{Commands, TagCommands};
+use crate::utils::params::substitute_parameters;
+use crate::exec::{ExecutionContext, execute_shell_command};
 
 fn print_commands(commands: &[Command]) -> Result<()> {
     let terminal_result = setup_terminal();
@@ -134,7 +136,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             
             let cmd = Command {
                 id: None,
-                command: command_str,
+                command: command_str.clone(),
                 timestamp,
                 directory,
                 tags,
@@ -142,6 +144,10 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             };
             let id = db.add_command(&cmd)?;
             print!("Command added to history with ID: {}", id);
+            
+            // If command has parameters, substitute them with user input
+            let current_params = parse_parameters(&command_str);
+            substitute_parameters(&command_str, &current_params)?;
             
             // If command has parameters, show them
             if !cmd.parameters.is_empty() {
@@ -242,42 +248,13 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 std::fs::create_dir_all(&command.directory)?;
             }
             
-            // If command has parameters, substitute them with user input
-            let final_command = if !command.parameters.is_empty() {
-                // Re-parse parameters from the current command to get the latest names
-                let current_params = crate::utils::params::parse_parameters(&command.command);
-                match crate::utils::params::substitute_parameters(&command.command, &current_params) {
-                    Ok(cmd) => cmd,
-                    Err(e) => {
-                        if e.to_string() == "Operation cancelled by user" {
-                            return Ok(());
-                        }
-                        return Err(e);
-                    }
-                }
-            } else {
-                command.command.clone()
+            let current_params = parse_parameters(&command.command);
+            let ctx = ExecutionContext {
+                command: substitute_parameters(&command.command, &current_params)?,
+                directory: command.directory.clone(),
+                test_mode: false,
             };
-            
-            // Execute the command through the shell's functions and aliases
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-            let wrapped_command = format!(". ~/.zshrc 2>/dev/null && {}", final_command);
-            let output = std::process::Command::new(&shell)
-                .args(&["-l", "-i", "-c", &wrapped_command])
-                .current_dir(&command.directory)
-                .env("CARGO_TERM_COLOR", "always")
-                .env("RUST_BACKTRACE", "1")
-                .env("SHELL", &shell)
-                .envs(std::env::vars())
-                .output()?;
-
-            // Only print the actual command output
-            if !output.stdout.is_empty() {
-                print!("{}", String::from_utf8_lossy(&output.stdout));
-            }
-            if !output.stderr.is_empty() {
-                eprint!("{}", String::from_utf8_lossy(&output.stderr));
-            }
+            execute_shell_command(&ctx)?;
         }
         Commands::ShellInit { shell } => {
             let script_path = crate::shell::hooks::init_shell(shell)?;

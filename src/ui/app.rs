@@ -1,4 +1,4 @@
-use std::io::{self, Write, Stdout};
+use std::io::{self, Stdout};
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -7,19 +7,16 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
+    Terminal,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Terminal,
 };
-use colored::*;
-use shell_escape::escape;
-use std::borrow::Cow;
-
 use crate::db::{Command, Database};
+use crate::utils::params::{substitute_parameters, parse_parameters};
+use crate::exec::{ExecutionContext, execute_shell_command};
 use crate::ui::AddCommandApp;
-use crate::utils::params::substitute_parameters;
 
 pub struct App<'a> {
     pub commands: Vec<Command>,
@@ -103,25 +100,14 @@ impl<'a> App<'a> {
                                     colored::control::set_override(true);
 
                                     // If command has parameters, substitute them with user input
-                                    let final_command = if !cmd.parameters.is_empty() {
-                                        // Re-parse parameters from the current command to get the latest names
-                                        let current_params = crate::utils::params::parse_parameters(&cmd.command);
-                                        substitute_parameters(&cmd.command, &current_params)?
-                                    } else {
-                                        cmd.command.clone()
+                                    let current_params = parse_parameters(&cmd.command);
+                                    let final_command = substitute_parameters(&cmd.command, &current_params)?;
+                                    let ctx = ExecutionContext {
+                                        command: final_command,
+                                        directory: cmd.directory.clone(),
+                                        test_mode: false,
                                     };
-
-                                    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-                                    let wrapped_command = format!(". ~/.zshrc 2>/dev/null && {}", final_command);
-                                    let output = std::process::Command::new(&shell)
-                                        .args(&["-c", &wrapped_command])
-                                        .current_dir(&cmd.directory)
-                                        .env("SHELL", &shell)
-                                        .envs(std::env::vars())
-                                        .output()?;
-
-                                    io::stdout().write_all(&output.stdout)?;
-                                    io::stderr().write_all(&output.stderr)?;
+                                    execute_shell_command(&ctx)?;
                                     
                                     return Ok(());
                                 }
