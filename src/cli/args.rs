@@ -17,11 +17,13 @@ pub enum Commands {
     ///   - With description: @filename:Name of file to create
     ///   - With default: @filename:Name of file to create=test.txt
     Add {
-        /// Command to add
-        command: Vec<String>,
         /// Tags to add to the command
         #[arg(short, long)]
         tags: Vec<String>,
+        
+        /// Command to add
+        #[arg(last = true)]
+        command: Vec<String>,
     },
     
     /// Execute a command by id (in the current shell)

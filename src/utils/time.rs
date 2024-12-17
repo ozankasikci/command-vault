@@ -11,6 +11,7 @@ pub fn parse_datetime(s: &str) -> Option<DateTime<Utc>> {
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M",
         "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S UTC",
         "%d/%m/%Y",
         "%d/%m/%Y %H:%M",
         "%d/%m/%Y %H:%M:%S",

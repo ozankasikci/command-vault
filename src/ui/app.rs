@@ -246,7 +246,8 @@ impl<'a> App<'a> {
             .filter(|&i| {
                 let cmd = &self.commands[i];
                 cmd.command.to_lowercase().contains(&search_term) ||
-                cmd.tags.iter().any(|tag| tag.to_lowercase().contains(&search_term))
+                cmd.tags.iter().any(|tag| tag.to_lowercase().contains(&search_term)) ||
+                cmd.directory.to_lowercase().contains(&search_term)
             })
             .collect();
         

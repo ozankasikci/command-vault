@@ -50,6 +50,7 @@ fn test_add_command_parsing() -> Result<()> {
     let args = Cli::try_parse_from([
         "command-vault",
         "add",
+        "--",
         "echo",
         "hello world",
     ])?;

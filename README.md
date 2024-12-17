@@ -35,8 +35,8 @@ Command Vault is a command manager for storing, and executing your complex comma
 ### Add Commands
 ```bash
 # Add a command with tags
-command-vault add --tags git,deploy git push origin main
-command-vault add echo "Hello, world!"
+command-vault add --tags git,deploy -- git push origin main
+command-vault add -- echo "Hello, world!"
 
 # Add a command with parameters
 command-vault add "git commit -m @message:Commit message"

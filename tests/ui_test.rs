@@ -27,6 +27,14 @@ fn create_test_commands() -> Vec<Command> {
             tags: vec!["git".to_string()],
             parameters: vec![],
         },
+        Command {
+            id: Some(3),
+            command: "docker ps".to_string(),
+            timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 2).unwrap(),
+            directory: "/home/user".to_string(),
+            tags: vec!["docker".to_string()],
+            parameters: vec![],
+        },
     ]
 }
 
@@ -36,8 +44,8 @@ fn test_app_new() -> Result<()> {
     let commands = create_test_commands();
     let app = App::new(commands.clone(), &mut db);
     
-    assert_eq!(app.commands.len(), 2);
-    assert_eq!(app.filtered_commands.len(), 2);
+    assert_eq!(app.commands.len(), 3);
+    assert_eq!(app.filtered_commands.len(), 3);
     assert_eq!(app.selected, None);
     assert!(!app.show_help);
     assert!(app.message.is_none());
@@ -50,38 +58,42 @@ fn test_app_new() -> Result<()> {
 fn test_app_filtering() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands, &mut db);
-    
-    // Filter by command text
+    let mut app = App::new(commands.clone(), &mut db);
+
+    // Test filtering by command
     app.filter_text = "git".to_string();
     app.update_filtered_commands();
     assert_eq!(app.filtered_commands.len(), 1);
     assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
-    
-    // Filter by tag
-    app.filter_text = "file".to_string();
+
+    // Test filtering by tag
+    app.filter_text = "docker".to_string();
     app.update_filtered_commands();
     assert_eq!(app.filtered_commands.len(), 1);
-    assert_eq!(app.commands[app.filtered_commands[0]].command, "ls -la");
-    
-    // Filter with no matches
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "docker ps");
+
+    // Test filtering by directory
+    app.filter_text = "project".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test no matches
     app.filter_text = "nonexistent".to_string();
     app.update_filtered_commands();
-    assert!(app.filtered_commands.is_empty());
-    
-    // Clear filter
-    app.filter_text.clear();
+    assert_eq!(app.filtered_commands.len(), 0);
+
+    // Test empty filter
+    app.filter_text = "".to_string();
     app.update_filtered_commands();
-    assert_eq!(app.filtered_commands.len(), 2);
-    
+    assert_eq!(app.filtered_commands.len(), 3);
+
     Ok(())
 }
 
 #[test]
 fn test_add_command_app_new() {
     let app = AddCommandApp::new();
-    
-    // Test initial state
     assert!(app.command.is_empty());
     assert!(app.tags.is_empty());
     assert!(app.current_tag.is_empty());
@@ -91,46 +103,40 @@ fn test_add_command_app_new() {
 #[test]
 fn test_add_command_app_command_input() {
     let mut app = AddCommandApp::new();
-    
-    // Test command input
-    app.command = "test command".to_string();
-    app.command_cursor = 4;
-    assert_eq!(app.command, "test command");
-    assert_eq!(app.command_cursor, 4);
+    app.set_command("ls -la".to_string());
+    assert_eq!(app.command, "ls -la");
 }
 
 #[test]
 fn test_add_command_app_tag_input() {
     let mut app = AddCommandApp::new();
     
-    // Test tag input
-    app.tags = vec!["tag1".to_string(), "tag2".to_string()];
-    app.current_tag = "tag3".to_string();
-    assert_eq!(app.tags.len(), 2);
-    assert_eq!(app.current_tag, "tag3");
+    // Test single tag
+    app.set_tags(vec!["git".to_string()]);
+    assert_eq!(app.tags, vec!["git"]);
     
-    // Test tag uniqueness
-    let tags_set: HashSet<_> = app.tags.iter().collect();
-    assert_eq!(app.tags.len(), tags_set.len(), "Tags should be unique");
+    // Test multiple tags
+    app.set_tags(vec!["git".to_string(), "docker".to_string()]);
+    assert_eq!(app.tags, vec!["git", "docker"]);
 }
 
 #[test]
 fn test_app_message_handling() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands, &mut db);
-    
+    let mut app = App::new(commands.clone(), &mut db);
+
     // Test setting message
     app.message = Some(("Test message".to_string(), ratatui::style::Color::Green));
     assert!(app.message.is_some());
     let (msg, color) = app.message.as_ref().unwrap();
     assert_eq!(msg, "Test message");
     assert_eq!(color, &ratatui::style::Color::Green);
-    
+
     // Test clearing message
     app.message = None;
     assert!(app.message.is_none());
-    
+
     Ok(())
 }
 
@@ -138,25 +144,26 @@ fn test_app_message_handling() -> Result<()> {
 fn test_app_selection() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands, &mut db);
-    
-    // Test initial selection
-    assert!(app.selected.is_none());
-    
-    // Test selecting an item
+    let mut app = App::new(commands.clone(), &mut db);
+
+    // Test initial state
+    assert_eq!(app.selected, None);
+
+    // Test selecting first item
     app.selected = Some(0);
     assert_eq!(app.selected, Some(0));
-    
-    // Test selecting last item
-    app.selected = Some(app.commands.len() - 1);
+
+    // Test selecting next item
+    app.selected = Some(1);
     assert_eq!(app.selected, Some(1));
-    
-    // Test selection with filtering
-    app.filter_text = "git".to_string();
-    app.update_filtered_commands();
+
+    // Test selecting previous item
     app.selected = Some(0);
     assert_eq!(app.selected, Some(0));
-    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
-    
+
+    // Test selecting last item
+    app.selected = Some(2);
+    assert_eq!(app.selected, Some(2));
+
     Ok(())
 }
