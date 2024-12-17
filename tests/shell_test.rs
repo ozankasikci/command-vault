@@ -94,12 +94,14 @@ fn test_init_shell() -> Result<()> {
     // Save original SHELL env var
     let original_shell = env::var("SHELL").ok();
 
+    // Ensure SHELL is set to a known value first
+    env::set_var("SHELL", "/bin/bash");
+
     // Test with shell override
     let path = init_shell(Some("zsh".to_string()))?;
     assert!(path.ends_with("zsh-integration.zsh"));
 
     // Test with environment detection
-    env::set_var("SHELL", "/bin/bash");
     let path = init_shell(None)?;
     assert!(path.ends_with("bash-integration.sh"));
 
