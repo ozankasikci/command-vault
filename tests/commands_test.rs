@@ -422,3 +422,80 @@ fn test_parameter_validation() -> Result<()> {
     
     Ok(())
 }
+
+#[test]
+fn test_command_with_spaces_in_parameters() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let command = Command {
+        id: None,
+        command: "echo @message".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["test".to_string()],
+        parameters: vec![Parameter {
+            name: "message".to_string(),
+            description: Some("A test message".to_string()),
+            default_value: Some("Hello World".to_string()),
+        }],
+    };
+    
+    db.add_command(&command)?;
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].command, "echo @message");
+    assert_eq!(commands[0].parameters[0].default_value, Some("Hello World".to_string()));
+    Ok(())
+}
+
+#[test]
+fn test_command_with_multiple_tags() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let command = Command {
+        id: None,
+        command: "test command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["tag1".to_string(), "tag2".to_string(), "tag3".to_string()],
+        parameters: Vec::new(),
+    };
+    
+    db.add_command(&command)?;
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].tags.len(), 3);
+    assert!(commands[0].tags.contains(&"tag1".to_string()));
+    assert!(commands[0].tags.contains(&"tag2".to_string()));
+    assert!(commands[0].tags.contains(&"tag3".to_string()));
+    Ok(())
+}
+
+#[test]
+fn test_command_with_special_chars() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let command = Command {
+        id: None,
+        command: "grep -r \"@pattern\" @directory".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["search".to_string()],
+        parameters: vec![
+            Parameter {
+                name: "pattern".to_string(),
+                description: Some("Search pattern".to_string()),
+                default_value: Some("*.txt".to_string()),
+            },
+            Parameter {
+                name: "directory".to_string(),
+                description: Some("Directory to search in".to_string()),
+                default_value: Some("/path/with spaces/".to_string()),
+            },
+        ],
+    };
+    
+    db.add_command(&command)?;
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].parameters.len(), 2);
+    assert_eq!(commands[0].parameters[1].default_value, Some("/path/with spaces/".to_string()));
+    Ok(())
+}

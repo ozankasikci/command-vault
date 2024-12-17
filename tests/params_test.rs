@@ -133,4 +133,57 @@ fn test_parse_parameters_from_params_rs() {
     assert_eq!(params[2].name, "image");
     assert_eq!(params[2].description, None);
     assert_eq!(params[2].default_value, None);
-} 
+}
+
+#[test]
+fn test_substitute_parameters_with_spaces() -> Result<()> {
+    let command = "echo @message";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: Some("A test message".to_string()),
+            default_value: Some("Hello World".to_string()),
+        },
+    ];
+    
+    let result = substitute_parameters(command, &params)?;
+    assert_eq!(result, "echo Hello World");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_special_chars() -> Result<()> {
+    let command = "grep @pattern @file";
+    let params = vec![
+        Parameter {
+            name: "pattern".to_string(),
+            description: Some("Search pattern".to_string()),
+            default_value: Some("*.txt".to_string()),
+        },
+        Parameter {
+            name: "file".to_string(),
+            description: Some("File to search in".to_string()),
+            default_value: Some("/path/to/dir".to_string()),
+        },
+    ];
+    
+    let result = substitute_parameters(command, &params)?;
+    assert_eq!(result, "grep *.txt /path/to/dir");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_empty_value() -> Result<()> {
+    let command = "echo @message";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: Some("A test message".to_string()),
+            default_value: Some("".to_string()),
+        },
+    ];
+    
+    let result = substitute_parameters(command, &params)?;
+    assert_eq!(result, "echo ");
+    Ok(())
+}
