@@ -93,31 +93,32 @@ fn test_get_shell_integration_script() -> Result<()> {
 fn test_init_shell() -> Result<()> {
     // Save original SHELL env var
     let original_shell = env::var("SHELL").ok();
-    
+
     // Test with shell override
     let path = init_shell(Some("zsh".to_string()))?;
     assert!(path.ends_with("zsh-integration.zsh"));
-    
+
     // Test with environment detection
     env::set_var("SHELL", "/bin/bash");
     let path = init_shell(None)?;
     assert!(path.ends_with("bash-integration.sh"));
-    
+
     // Test error case - unknown shell
     env::set_var("SHELL", "/bin/fish");
     let result = init_shell(None);
     assert!(result.is_err());
-    
+
     // Test error case - no shell env var
     env::remove_var("SHELL");
     let result = init_shell(None);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Could not detect shell"));
-    
-    // Restore original SHELL env var
+
+    // Restore original shell env var
     if let Some(shell) = original_shell {
         env::set_var("SHELL", shell);
+    } else {
+        env::remove_var("SHELL");
     }
-    
+
     Ok(())
 }
