@@ -252,7 +252,8 @@ impl<'a> App<'a> {
         }
     }
 
-    fn update_filtered_commands(&mut self) {
+    /// Update the filtered commands list based on the current filter text
+    pub fn update_filtered_commands(&mut self) {
         let search_term = self.filter_text.to_lowercase();
         self.filtered_commands = (0..self.commands.len())
             .filter(|&i| {

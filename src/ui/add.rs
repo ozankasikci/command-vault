@@ -19,15 +19,15 @@ pub type CommandResult = Option<(String, Vec<String>, Option<i32>)>;
 #[derive(Default)]
 pub struct AddCommandApp {
     /// The command being entered
-    command: String,
+    pub command: String,
+    /// Tags for the command
+    pub tags: Vec<String>,
+    /// Current tag being entered
+    pub current_tag: String,
     /// Current cursor position in the command
-    command_cursor: usize,
+    pub command_cursor: usize,
     /// Current line in multi-line command
     command_line: usize,
-    /// Tags for the command
-    tags: Vec<String>,
-    /// Current tag being entered
-    current_tag: String,
     /// Current input mode
     input_mode: InputMode,
     /// Suggested tags

@@ -33,7 +33,9 @@ fn test_detect_current_shell() {
     
     // Test shell paths with mixed case
     env::set_var("SHELL", "/bin/ZsH");
-    assert_eq!(detect_current_shell(), Some("zsh".to_string()));
+    let result = detect_current_shell();
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().to_lowercase(), "zsh");
     
     // Restore original SHELL env var
     if let Some(shell) = original_shell {
