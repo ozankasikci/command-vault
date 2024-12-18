@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  test-ubuntu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu
+    volumes:
+      - .:/app
+    environment:
+      - COMMAND_VAULT_TEST=1
+    command: cargo test --test exec_test -- --nocapture
+
+  test-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows
+    volumes:
+      - .:/app
+    environment:
+      - COMMAND_VAULT_TEST=1
+    command: cargo test --test exec_test -- --nocapture

@@ -1,0 +1,26 @@
+FROM ubuntu:latest
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    pkg-config \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /app
+
+# Copy the source code
+COPY . .
+
+# Set test mode
+ENV COMMAND_VAULT_TEST=1
+
+# Default command
+CMD ["cargo", "test", "--test", "exec_test", "--", "--nocapture"]
