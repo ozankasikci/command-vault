@@ -26,6 +26,7 @@ pub struct App<'a> {
     pub filter_text: String,
     pub filtered_commands: Vec<usize>,
     pub db: &'a mut Database,
+    pub confirm_delete: Option<usize>, // Index of command pending deletion
 }
 
 impl<'a> App<'a> {
@@ -39,6 +40,7 @@ impl<'a> App<'a> {
             filter_text: String::new(),
             filtered_commands,
             db,
+            confirm_delete: None,
         }
     }
 
@@ -56,7 +58,16 @@ impl<'a> App<'a> {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => {
-                        return Ok(());
+                        if !self.filter_text.is_empty() {
+                            self.filter_text.clear();
+                            self.update_filtered_commands();
+                        } else if self.confirm_delete.is_some() {
+                            self.confirm_delete = None;
+                        } else if self.show_help {
+                            self.show_help = false;
+                        } else {
+                            return Ok(());
+                        }
                     }
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Ok(());
@@ -89,10 +100,34 @@ impl<'a> App<'a> {
                             }
                         }
                     }
-                    KeyCode::Enter | KeyCode::Char('x') => {
+                    KeyCode::Enter => {
                         if let Some(selected) = self.selected {
-                            if let Some(&idx) = self.filtered_commands.get(selected) {
-                                if let Some(cmd) = self.commands.get(idx) {
+                            if let Some(confirm_idx) = self.confirm_delete {
+                                if confirm_idx == selected {
+                                    if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
+                                        if let Some(command_id) = self.commands[filtered_idx].id {
+                                            match self.db.delete_command(command_id) {
+                                                Ok(_) => {
+                                                    self.commands.remove(filtered_idx);
+                                                    self.message = Some(("Command deleted successfully".to_string(), Color::Green));
+                                                    self.update_filtered_commands();
+                                                    // Update selection after deletion
+                                                    if self.filtered_commands.is_empty() {
+                                                        self.selected = None;
+                                                    } else {
+                                                        self.selected = Some(selected.min(self.filtered_commands.len() - 1));
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    self.message = Some((format!("Failed to delete command: {}", e), Color::Red));
+                                                }
+                                            }
+                                            self.confirm_delete = None;
+                                        }
+                                    }
+                                }
+                            } else if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
+                                if let Some(cmd) = self.commands.get(filtered_idx) {
                                     // Exit TUI temporarily
                                     restore_terminal(terminal)?;
                                     
@@ -194,22 +229,7 @@ impl<'a> App<'a> {
                         if let Some(selected) = self.selected {
                             if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
                                 if let Some(command_id) = self.commands[filtered_idx].id {
-                                    match self.db.delete_command(command_id) {
-                                        Ok(_) => {
-                                            self.commands.remove(filtered_idx);
-                                            self.message = Some(("Command deleted successfully".to_string(), Color::Green));
-                                            self.update_filtered_commands();
-                                            // Update selection after deletion
-                                            if self.filtered_commands.is_empty() {
-                                                self.selected = None;
-                                            } else {
-                                                self.selected = Some(selected.min(self.filtered_commands.len() - 1));
-                                            }
-                                        }
-                                        Err(e) => {
-                                            self.message = Some((format!("Failed to delete command: {}", e), Color::Red));
-                                        }
-                                    }
+                                    self.confirm_delete = Some(selected);
                                 }
                             }
                         }
@@ -231,6 +251,9 @@ impl<'a> App<'a> {
                         if !self.filter_text.is_empty() {
                             self.filter_text.clear();
                             self.update_filtered_commands();
+                        } else if self.confirm_delete.is_some() {
+                            self.confirm_delete = None;
+                            self.message = Some(("Delete operation cancelled".to_string(), Color::Yellow));
                         }
                     }
                     _ => {}
@@ -277,7 +300,7 @@ impl<'a> App<'a> {
                 "  x      - Execute selected command in a new shell",
                 "  c/y    - Copy command to clipboard (both keys work the same)",
                 "  e      - Edit command (modify command text, tags, or exit code)",
-                "  d      - Delete selected command permanently",
+                "  d      - Delete selected command (will ask for confirmation)",
                 "",
                 "Filtering and Search:",
                 "  /      - Start filtering commands (type to filter)",
@@ -396,18 +419,8 @@ impl<'a> App<'a> {
                 Span::raw(" or "),
                 Span::styled("y", Style::default().fg(Color::Yellow)),
                 Span::raw(" to copy, "),
-                Span::styled("e", Style::default().fg(Color::Yellow)),
-                Span::raw(" to edit, "),
-                Span::styled("d", Style::default().fg(Color::Yellow)),
-                Span::raw(" to delete, "),
-                Span::styled("Enter", Style::default().fg(Color::Yellow)),
-                Span::raw(" or "),
-                Span::styled("x", Style::default().fg(Color::Yellow)),
-                Span::raw(" to execute, "),
-                Span::styled("/", Style::default().fg(Color::Yellow)),
-                Span::raw(" to filter, "),
                 Span::styled("?", Style::default().fg(Color::Yellow)),
-                Span::raw(" to toggle help"),
+                Span::raw(" for help"),
             ]
         } else {
             vec![
@@ -418,9 +431,39 @@ impl<'a> App<'a> {
         };
 
         let status = Paragraph::new(Line::from(status))
-            .block(Block::default().borders(Borders::ALL))
-            .style(Style::default().fg(Color::Gray));
+            .block(Block::default().borders(Borders::ALL));
         f.render_widget(status, chunks[3]);
+
+        // Render delete confirmation dialog if needed
+        if let Some(idx) = self.confirm_delete {
+            if let Some(&cmd_idx) = self.filtered_commands.get(idx) {
+                if let Some(cmd) = self.commands.get(cmd_idx) {
+                    let command_str = format!("Command: {}", cmd.command);
+                    let id_str = format!("ID: {}", cmd.id.unwrap_or(0));
+                    
+                    let dialog_text = vec![
+                        "Are you sure you want to delete this command?",
+                        "",
+                        &command_str,
+                        &id_str,
+                        "",
+                        "Press Enter to confirm or Esc to cancel",
+                    ];
+
+                    let dialog = Paragraph::new(dialog_text.join("\n"))
+                        .style(Style::default().fg(Color::White))
+                        .block(Block::default()
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(Color::Red))
+                            .title("Confirm Delete"));
+
+                    // Center the dialog
+                    let area = centered_rect(60, 40, f.size());
+                    f.render_widget(Clear, area);
+                    f.render_widget(dialog, area);
+                }
+            }
+        }
     }
 }
 
