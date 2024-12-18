@@ -27,10 +27,13 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     };
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
-    // Verify that the working directory exists
-    let working_dir = std::path::Path::new(&ctx.directory);
-    if !working_dir.exists() {
-        return Err(anyhow::anyhow!("Working directory does not exist: {}", ctx.directory));
+    // Verify and canonicalize the working directory
+    let working_dir = std::path::Path::new(&ctx.directory)
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Invalid working directory '{}': {}", ctx.directory, e))?;
+
+    if !working_dir.exists() || !working_dir.is_dir() {
+        return Err(anyhow::anyhow!("Working directory does not exist or is not a directory: {}", ctx.directory));
     }
 
     if ctx.test_mode {
@@ -73,10 +76,9 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
                 continue;
             }
 
-            let command_str = parts.join(" ");
             let mut command = if cfg!(windows) {
                 let mut cmd = std::process::Command::new("cmd.exe");
-                cmd.args(&["/C", &command_str]);
+                cmd.args(&["/C", &parts.join(" ")]);
                 cmd
             } else {
                 let mut cmd = std::process::Command::new(&parts[0]);
@@ -85,7 +87,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             };
 
             command
-                .current_dir(working_dir)
+                .current_dir(&working_dir)
                 .env("COMMAND_VAULT_TEST", "1")
                 .env("GIT_TERMINAL_PROMPT", "0")  // Disable git terminal prompts
                 .env("GIT_ASKPASS", "echo")       // Make git use echo for password prompts
@@ -105,7 +107,10 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             io::stderr().write_all(&output.stderr)?;
 
             if !output.status.success() {
-                return Err(anyhow::anyhow!("Command failed with status: {}", output.status));
+                return Err(anyhow::anyhow!(
+                    "Command failed with status: {}",
+                    output.status
+                ));
             }
         }
         Ok(())
@@ -122,7 +127,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         };
 
         command
-            .current_dir(working_dir)
+            .current_dir(&working_dir)
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit());

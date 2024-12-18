@@ -5,6 +5,7 @@ mod tests {
     use std::env;
     use tempfile::TempDir;
     use chrono::Utc;
+    use std::fs;
 
     fn create_test_command(command: &str) -> Command {
         Command {
@@ -26,10 +27,26 @@ mod tests {
     #[test]
     fn test_command_with_working_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let mut command = create_test_command("pwd");
+        let test_file = "test.txt";
+        let test_content = "test content";
+        
+        // Create a test file in the temp directory
+        fs::write(temp_dir.path().join(test_file), test_content).unwrap();
+        
+        // Use a command that works on all platforms
+        let mut command = if cfg!(windows) {
+            create_test_command(&format!("type {}", test_file))
+        } else {
+            create_test_command(&format!("cat {}", test_file))
+        };
         command.directory = temp_dir.path().to_string_lossy().to_string();
         
-        assert!(execute_command(&command).is_ok());
+        // Set test mode to capture output
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        
+        assert!(result.is_ok());
     }
 
     #[test]
