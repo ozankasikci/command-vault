@@ -27,6 +27,12 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     };
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
+    // Verify that the working directory exists
+    let working_dir = std::path::Path::new(&ctx.directory);
+    if !working_dir.exists() {
+        return Err(anyhow::anyhow!("Working directory does not exist: {}", ctx.directory));
+    }
+
     if ctx.test_mode {
         // In test mode, execute commands directly without shell
         for cmd in wrapped_command.split("&&").map(str::trim) {
@@ -79,7 +85,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             };
 
             command
-                .current_dir(&ctx.directory)
+                .current_dir(working_dir)
                 .env("COMMAND_VAULT_TEST", "1")
                 .env("GIT_TERMINAL_PROMPT", "0")  // Disable git terminal prompts
                 .env("GIT_ASKPASS", "echo")       // Make git use echo for password prompts
@@ -104,45 +110,27 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         }
         Ok(())
     } else {
-        // In normal mode, use interactive shell
-        let mut command = std::process::Command::new(&shell);
-        
-        // Special handling for git log format strings
-        let escaped_cmd = if wrapped_command.contains("--pretty=format:") {
-            // Keep the exact command as is, just wrap it in a function
-            format!(r#"
-                f() {{
-                    {}
-                }}
-                f
-            "#, 
-                wrapped_command
-            )
+        // Interactive mode: use shell
+        let mut command = if cfg!(windows) {
+            let mut cmd = std::process::Command::new("cmd.exe");
+            cmd.args(&["/C", &wrapped_command]);
+            cmd
         } else {
-            wrapped_command.to_string()
-        };
-
-        let (shell_flag, cmd) = if cfg!(windows) {
-            ("/C", escaped_cmd)
-        } else {
-            ("-c", escaped_cmd)
+            let mut cmd = std::process::Command::new(&shell);
+            cmd.args(&["-c", &wrapped_command]);
+            cmd
         };
 
         command
-            .args(&[shell_flag, &cmd])
-            .current_dir(&ctx.directory)
-            .env("SHELL", &shell)
-            .envs(std::env::vars())
+            .current_dir(working_dir)
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit());
 
         let status = command.status()?;
-
         if !status.success() {
             return Err(anyhow::anyhow!("Command failed with status: {}", status));
         }
-
         Ok(())
     }
 }
