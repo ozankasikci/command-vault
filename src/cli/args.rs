@@ -62,6 +62,12 @@ pub enum Commands {
         #[arg(short, long)]
         shell: Option<String>,
     },
+    /// Delete a command from history
+    Delete {
+        /// Command ID to delete
+        #[arg(required = true)]
+        command_id: i64,
+    },
 }
 
 #[derive(Subcommand, Debug)]

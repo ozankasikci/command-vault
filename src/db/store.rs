@@ -492,14 +492,16 @@ impl Database {
     /// # Returns
     /// * `Result<()>` - Success or failure
     pub fn delete_command(&mut self, command_id: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        
         // First delete from command_tags
-        self.conn.execute(
+        tx.execute(
             "DELETE FROM command_tags WHERE command_id = ?",
             [command_id],
         )?;
 
         // Then delete from commands
-        let rows_affected = self.conn.execute(
+        let rows_affected = tx.execute(
             "DELETE FROM commands WHERE id = ?",
             [command_id],
         )?;
@@ -508,6 +510,13 @@ impl Database {
             return Err(anyhow!("Command not found"));
         }
 
+        // Clean up unused tags
+        tx.execute(
+            "DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM command_tags)",
+            [],
+        )?;
+
+        tx.commit()?;
         Ok(())
     }
 }

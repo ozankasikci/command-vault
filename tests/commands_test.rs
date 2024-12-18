@@ -447,3 +447,77 @@ fn test_command_with_special_chars() -> Result<()> {
     assert_eq!(commands[0].parameters[1].description, Some("Directory to search in".to_string()));
     Ok(())
 }
+
+#[test]
+fn test_handle_command_delete() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Add a test command
+    let command = Command {
+        id: None,
+        command: "test command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec![],
+        parameters: Vec::new(),
+    };
+    let id = db.add_command(&command)?;
+    
+    // Verify command exists
+    let commands = db.list_commands(10, false)?;
+    assert_eq!(commands.len(), 1);
+    
+    // Delete the command
+    handle_command(Commands::Delete { command_id: id }, &mut db)?;
+    
+    // Verify command was deleted
+    let commands = db.list_commands(10, false)?;
+    assert_eq!(commands.len(), 0);
+    Ok(())
+}
+
+#[test]
+fn test_handle_command_delete_nonexistent() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Try to delete a command that doesn't exist
+    let result = handle_command(Commands::Delete { command_id: 999 }, &mut db);
+    
+    // Verify we get an error
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Command with ID 999 not found"));
+    Ok(())
+}
+
+#[test]
+fn test_handle_command_delete_with_tags() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // Add a test command with tags
+    let command = Command {
+        id: None,
+        command: "test command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["test".to_string(), "example".to_string()],
+        parameters: Vec::new(),
+    };
+    let id = db.add_command(&command)?;
+    
+    // Verify command exists with tags
+    let commands = db.list_commands(10, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].tags.len(), 2);
+    
+    // Delete the command
+    handle_command(Commands::Delete { command_id: id }, &mut db)?;
+    
+    // Verify command and its tags were deleted
+    let commands = db.list_commands(10, false)?;
+    assert_eq!(commands.len(), 0);
+    
+    // Verify tags were removed
+    let tags = db.list_tags()?;
+    assert_eq!(tags.len(), 0);
+    Ok(())
+}

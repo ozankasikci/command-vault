@@ -283,6 +283,20 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             print!("{}", script_path.display());
             return Ok(());
         },
+        Commands::Delete { command_id } => {
+            // First check if the command exists
+            if let Some(command) = db.get_command(command_id)? {
+                // Show the command that will be deleted
+                println!("Deleting command:");
+                print_commands(&[command])?;
+                
+                // Delete the command
+                db.delete_command(command_id)?;
+                println!("Command deleted successfully");
+            } else {
+                return Err(anyhow!("Command with ID {} not found", command_id));
+            }
+        }
     }
     Ok(())
 }
