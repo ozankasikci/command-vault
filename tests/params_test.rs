@@ -132,3 +132,107 @@ fn test_parse_parameters_from_params_rs() {
     assert_eq!(params[2].name, "image");
     assert_eq!(params[2].description, None);
 }
+
+#[test]
+fn test_substitute_parameters_basic() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @message";
+    let parameters = vec![Parameter::with_description("message".to_string(), None)];
+    
+    let result = substitute_parameters(command, &parameters, Some("hello"))?;
+    assert_eq!(result, "echo hello");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @message";
+    let parameters = vec![
+        Parameter::with_description("message".to_string(), Some("default value".to_string())),
+    ];
+    
+    let result = substitute_parameters(command, &parameters, Some("custom"))?;
+    assert_eq!(result, "echo custom");
+    
+    let result = substitute_parameters(command, &parameters, None)?;
+    assert_eq!(result, "echo test_value");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_multiple() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "grep @pattern @file";
+    let parameters = vec![
+        Parameter::with_description("pattern".to_string(), Some("search term".to_string())),
+        Parameter::with_description("file".to_string(), Some("test.txt".to_string())),
+    ];
+    
+    let result = substitute_parameters(command, &parameters, Some("error\nlog.txt"))?;
+    assert_eq!(result, "grep 'error' 'log.txt'");
+    
+    let result = substitute_parameters(command, &parameters, None)?;
+    assert_eq!(result, "grep 'test_value' 'test_value'");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_quotes() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @message";
+    let parameters = vec![Parameter::with_description("message".to_string(), None)];
+    
+    // Test with spaces
+    let result = substitute_parameters(command, &parameters, Some("hello world"))?;
+    assert_eq!(result, "echo 'hello world'");
+    
+    // Test with special characters
+    let result = substitute_parameters(command, &parameters, Some("hello * world"))?;
+    assert_eq!(result, "echo 'hello * world'");
+    
+    // Test with single quotes
+    let result = substitute_parameters(command, &parameters, Some("it's working"))?;
+    assert_eq!(result, "echo 'it'\\''s working'");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_empty_command() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "";
+    let parameters = vec![];
+    
+    let result = substitute_parameters(command, &parameters, None)?;
+    assert_eq!(result, "");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_no_parameters() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo hello";
+    let parameters = vec![];
+    
+    let result = substitute_parameters(command, &parameters, None)?;
+    assert_eq!(result, "echo hello");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}

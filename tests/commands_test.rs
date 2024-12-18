@@ -207,12 +207,6 @@ fn test_git_log_format_command() -> Result<()> {
     let test_dir = temp_dir.path().canonicalize()?;
     env::set_current_dir(&test_dir)?;
     
-    // Initialize git repo for testing
-    std::process::Command::new("git")
-        .args(&["init"])
-        .current_dir(&test_dir)
-        .output()?;
-
     // Add the git log command with format string
     let format_str = "%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset";
     let command = vec![
