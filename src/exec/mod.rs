@@ -20,13 +20,6 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
 }
 
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
-    let shell = if cfg!(windows) {
-        "cmd.exe".to_string()
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
-    };
-    let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
-
     // Verify and canonicalize the working directory
     let working_dir = std::path::Path::new(&ctx.directory)
         .canonicalize()
@@ -36,53 +29,59 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         return Err(anyhow::anyhow!("Working directory does not exist or is not a directory: {}", ctx.directory));
     }
 
+    let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
+
     if ctx.test_mode {
-        // In test mode, execute commands directly without shell
-        for cmd in wrapped_command.split("&&").map(str::trim) {
-            // Parse command preserving quoted arguments
-            let mut parts = Vec::new();
-            let mut current = String::new();
-            let mut in_quotes = false;
-            let mut chars = cmd.chars().peekable();
-
-            while let Some(c) = chars.next() {
-                match c {
-                    '"' => {
-                        if in_quotes {
-                            if current.len() > 0 {
-                                parts.push(current);
-                                current = String::new();
-                            }
-                            in_quotes = false;
-                        } else {
-                            in_quotes = true;
-                        }
-                    }
-                    ' ' if !in_quotes => {
-                        if current.len() > 0 {
-                            parts.push(current);
-                            current = String::new();
-                        }
-                    }
-                    _ => current.push(c),
-                }
-            }
-            if current.len() > 0 {
-                parts.push(current);
-            }
-
-            // Execute command with parsed arguments
-            if parts.is_empty() {
+        // In test mode, execute commands directly
+        for cmd_str in wrapped_command.split("&&").map(str::trim) {
+            if cmd_str.is_empty() {
                 continue;
             }
 
             let mut command = if cfg!(windows) {
                 let mut cmd = std::process::Command::new("cmd.exe");
-                cmd.args(&["/C", &parts.join(" ")]);
+                cmd.args(&["/C", cmd_str]);
                 cmd
             } else {
+                let mut parts = Vec::new();
+                let mut current = String::new();
+                let mut in_quotes = false;
+                let mut chars = cmd_str.chars().peekable();
+
+                while let Some(c) = chars.next() {
+                    match c {
+                        '"' => {
+                            if in_quotes {
+                                if !current.is_empty() {
+                                    parts.push(current);
+                                    current = String::new();
+                                }
+                                in_quotes = false;
+                            } else {
+                                in_quotes = true;
+                            }
+                        }
+                        ' ' if !in_quotes => {
+                            if !current.is_empty() {
+                                parts.push(current);
+                                current = String::new();
+                            }
+                        }
+                        _ => current.push(c),
+                    }
+                }
+                if !current.is_empty() {
+                    parts.push(current);
+                }
+
+                if parts.is_empty() {
+                    continue;
+                }
+
                 let mut cmd = std::process::Command::new(&parts[0]);
-                cmd.args(&parts[1..]);
+                if parts.len() > 1 {
+                    cmd.args(&parts[1..]);
+                }
                 cmd
             };
 
@@ -93,8 +92,8 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
                 .env("GIT_ASKPASS", "echo")       // Make git use echo for password prompts
                 .envs(std::env::vars());
 
-            // Configure stdio based on whether we're in a test environment
-            if std::env::var("COMMAND_VAULT_TEST").is_ok() {
+            // Configure stdio based on test mode
+            if ctx.test_mode {
                 command
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::piped())
@@ -108,14 +107,21 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
 
             if !output.status.success() {
                 return Err(anyhow::anyhow!(
-                    "Command failed with status: {}",
-                    output.status
+                    "Command failed with status: {}. Error: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
                 ));
             }
         }
         Ok(())
     } else {
         // Interactive mode: use shell
+        let shell = if cfg!(windows) {
+            "cmd.exe".to_string()
+        } else {
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+        };
+
         let mut command = if cfg!(windows) {
             let mut cmd = std::process::Command::new("cmd.exe");
             cmd.args(&["/C", &wrapped_command]);

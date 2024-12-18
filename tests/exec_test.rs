@@ -6,6 +6,7 @@ mod tests {
     use tempfile::TempDir;
     use chrono::Utc;
     use std::fs;
+    use std::path::Path;
 
     fn create_test_command(command: &str) -> Command {
         Command {
@@ -26,27 +27,35 @@ mod tests {
 
     #[test]
     fn test_command_with_working_directory() {
+        // Create a temporary directory and file
         let temp_dir = TempDir::new().unwrap();
         let test_file = "test.txt";
         let test_content = "test content";
         
-        // Create a test file in the temp directory
-        fs::write(temp_dir.path().join(test_file), test_content).unwrap();
+        // Get the canonical path to avoid UNC issues on Windows
+        let canonical_temp_dir = temp_dir.path().canonicalize().unwrap();
+        let test_file_path = canonical_temp_dir.join(test_file);
         
-        // Use a command that works on all platforms
-        let mut command = if cfg!(windows) {
-            create_test_command(&format!("type {}", test_file))
+        // Write test content to file
+        fs::write(&test_file_path, test_content).unwrap();
+        
+        // Create appropriate command based on platform
+        let command_str = if cfg!(windows) {
+            format!("cmd.exe /c type {}", test_file)
         } else {
-            create_test_command(&format!("cat {}", test_file))
+            format!("cat {}", test_file)
         };
-        command.directory = temp_dir.path().to_string_lossy().to_string();
         
-        // Set test mode to capture output
+        // Create and configure the command
+        let mut command = create_test_command(&command_str);
+        command.directory = canonical_temp_dir.to_string_lossy().to_string();
+        
+        // Set test mode and execute
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
         
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Command execution failed: {:?}", result.err());
     }
 
     #[test]
