@@ -286,13 +286,21 @@ fn test_exec_command_with_parameters() -> Result<()> {
     std::env::set_var("COMMAND_VAULT_TEST", "1");
     
     let (mut db, _db_dir) = create_test_db()?;
-    let temp_dir = tempdir()?;
-    let test_dir = temp_dir.path().canonicalize()?;
+    
+    // Use current directory instead of temp dir for Windows compatibility
+    let test_dir = std::env::current_dir()?;
+    
+    // Create a platform-specific echo command
+    let echo_command = if cfg!(windows) {
+        "cmd /c echo @message"
+    } else {
+        "echo @message"
+    };
     
     // Add a command with parameters
     let command = Command {
         id: None,
-        command: "echo @message".to_string(),
+        command: echo_command.to_string(),
         timestamp: Utc::now(),
         directory: test_dir.to_string_lossy().to_string(),
         tags: vec![],
