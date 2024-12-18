@@ -22,7 +22,7 @@ pub enum Commands {
         tags: Vec<String>,
         
         /// Command to add
-        #[arg(last = true)]
+        #[arg(trailing_var_arg = true)]
         command: Vec<String>,
     },
     

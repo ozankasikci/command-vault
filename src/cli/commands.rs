@@ -142,16 +142,12 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 parameters,
             };
             let id = db.add_command(&cmd)?;
-            print!("Command added to history with ID: {}", id);
-            
-            // If command has parameters, substitute them with user input
-            let current_params = parse_parameters(&command_str);
-            substitute_parameters(&command_str, &current_params, None)?;
+            println!("Command added to history with ID: {}", id);
             
             // If command has parameters, show them
             if !cmd.parameters.is_empty() {
-                print!("\nDetected parameters:");
-                for param in current_params.iter() {
+                println!("\nDetected parameters:");
+                for param in &cmd.parameters {
                     let desc = param.description.as_deref().unwrap_or("None");
                     println!("  {} - Description: {}", param.name.yellow(), desc);
                 }
