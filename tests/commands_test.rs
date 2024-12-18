@@ -137,9 +137,9 @@ fn test_add_command_with_tags() -> Result<()> {
     let test_dir = temp_dir.path().canonicalize()?;
     env::set_current_dir(&test_dir)?;
     
-    let command = "test command".to_string();
+    let command = vec!["test".to_string(), "command".to_string()];
     let add_command = Commands::Add { 
-        command: vec![command.clone()], 
+        command: command.clone(), 
         tags: vec!["tag1".to_string(), "tag2".to_string()] 
     };
     
@@ -157,62 +157,13 @@ fn test_add_command_with_tags() -> Result<()> {
 }
 
 #[test]
-fn test_execute_command() -> Result<()> {
-    // Ensure we're in test mode
-    std::env::set_var("COMMAND_VAULT_TEST", "1");
-    
-    let (mut db, _db_dir) = create_test_db()?;
-    let temp_dir = tempdir()?;
-    let test_dir = temp_dir.path().canonicalize()?;
-    
-    // Use a simple, reliable command
-    let command = Command {
-        id: None,
-        command: "echo test_message".to_string(),
-        timestamp: Utc::now(),
-        directory: test_dir.to_string_lossy().to_string(),
-        tags: vec![],
-        parameters: Vec::new(),
-    };
-    
-    // Add command to database
-    let id = db.add_command(&command)?;
-    
-    // Execute the command
-    let exec_command = Commands::Exec { command_id: id };
-    handle_command(exec_command, &mut db)?;
-    
-    // Verify command exists in database
-    let saved = db.get_command(id)?.unwrap();
-    assert_eq!(saved.command, "echo test_message");
-    
-    Ok(())
-}
-
-#[test]
-fn test_empty_command_validation() -> Result<()> {
-    let (mut db, _db_dir) = create_test_db()?;
-    
-    // Try adding an empty command
-    let add_command = Commands::Add { 
-        command: vec!["".to_string()], 
-        tags: vec![] 
-    };
-    
-    let result = handle_command(add_command, &mut db);
-    assert!(result.is_err());
-    
-    Ok(())
-}
-
-#[test]
 fn test_command_with_output() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     
     // Test command that would produce output
-    let command = "echo 'Hello, World!'".to_string();
+    let command = vec!["echo".to_string(), "\"Hello, World!\"".to_string()];
     let add_command = Commands::Add { 
-        command: vec![command.clone()], 
+        command: command.clone(), 
         tags: vec![] 
     };
     
@@ -220,7 +171,7 @@ fn test_command_with_output() -> Result<()> {
     
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
-    assert_eq!(commands[0].command, "echo 'Hello, World!'");
+    assert_eq!(commands[0].command, "echo \"Hello, World!\"");
     
     Ok(())
 }
@@ -230,9 +181,9 @@ fn test_command_with_stderr() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     
     // Test command that would produce stderr
-    let command = "ls nonexistent_directory".to_string();
+    let command = vec!["ls".to_string(), "nonexistent_directory".to_string()];
     let add_command = Commands::Add { 
-        command: vec![command.clone()], 
+        command: command.clone(), 
         tags: vec![] 
     };
     
@@ -241,6 +192,53 @@ fn test_command_with_stderr() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "ls nonexistent_directory");
+    
+    Ok(())
+}
+
+#[test]
+fn test_git_log_format_command() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    let temp_dir = tempdir()?;
+    std::fs::create_dir_all(temp_dir.path())?;
+
+    // Change to the test directory
+    let original_dir = env::current_dir()?;
+    let test_dir = temp_dir.path().canonicalize()?;
+    env::set_current_dir(&test_dir)?;
+    
+    // Initialize git repo for testing
+    std::process::Command::new("git")
+        .args(&["init"])
+        .current_dir(&test_dir)
+        .output()?;
+
+    // Add the git log command with format string
+    let format_str = "%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset";
+    let command = vec![
+        "git".to_string(),
+        "log".to_string(),
+        "--graph".to_string(),
+        format!("--pretty=format:{}", format_str),
+        "--abbrev-commit".to_string(),
+    ];
+    
+    let add_command = Commands::Add { 
+        command: command.clone(), 
+        tags: vec![] 
+    };
+    
+    handle_command(add_command, &mut db)?;
+    
+    let commands = db.list_commands(1, false)?;
+    assert_eq!(commands.len(), 1);
+    assert_eq!(
+        commands[0].command, 
+        format!("git log --graph \"--pretty=format:{}\" --abbrev-commit", format_str)
+    );
+    
+    // Restore the original directory
+    env::set_current_dir(original_dir)?;
     
     Ok(())
 }

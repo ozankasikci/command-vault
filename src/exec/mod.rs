@@ -14,14 +14,8 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
     if test_mode {
         command.to_string()
     } else {
-        let shell_type = crate::shell::hooks::detect_current_shell()
-            .unwrap_or_else(|| "sh".to_string());
-        
-        match shell_type.as_str() {
-            "zsh" => format!(". ~/.zshrc 2>/dev/null && {}", command),
-            "bash" => format!(". ~/.bashrc 2>/dev/null && {}", command),
-            _ => command.to_string(),
-        }
+        // Don't try to source rc files, just return the command
+        command.to_string()
     }
 }
 
@@ -102,8 +96,24 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     } else {
         // In normal mode, use interactive shell
         let mut command = std::process::Command::new(&shell);
+        
+        // Special handling for git log format strings
+        let escaped_cmd = if wrapped_command.contains("--pretty=format:") {
+            // Keep the exact command as is, just wrap it in a function
+            format!(r#"
+                f() {{
+                    {}
+                }}
+                f
+            "#, 
+                wrapped_command
+            )
+        } else {
+            wrapped_command.to_string()
+        };
+
         command
-            .args(&["-l", "-i", "-c", &wrapped_command])
+            .args(&["-c", &escaped_cmd])
             .current_dir(&ctx.directory)
             .env("SHELL", &shell)
             .envs(std::env::vars())

@@ -115,8 +115,33 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
 pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
     match command {
         Commands::Add { command, tags } => {
-            // Just join the arguments literally without any shell expansion
-            let command_str = command.join(" ");
+            // Preserve quotes in arguments that need them
+            let command_str = command.iter().enumerate().fold(String::new(), |mut acc, (i, arg)| {
+                if i > 0 {
+                    acc.push(' ');
+                }
+                // Special case for git format strings - ensure they're properly quoted
+                if arg.starts_with("--pretty=format:") {
+                    if arg.contains('"') {
+                        acc.push_str(&format!("'{}'", arg)); // Use single quotes if format contains double quotes
+                    } else {
+                        acc.push_str(&format!("\"{}\"", arg)); // Use double quotes by default
+                    }
+                }
+                // If the argument contains special characters or spaces, preserve its quotes
+                else if arg.contains(':') || arg.contains('%') || arg.contains(' ') {
+                    if (arg.starts_with('"') && arg.ends_with('"')) || (arg.starts_with('\'') && arg.ends_with('\'')) {
+                        acc.push_str(arg); // Already quoted
+                    } else if arg.contains('"') {
+                        acc.push_str(&format!("'{}'", arg)); // Use single quotes if arg contains double quotes
+                    } else {
+                        acc.push_str(&format!("\"{}\"", arg)); // Use double quotes by default
+                    }
+                } else {
+                    acc.push_str(arg);
+                }
+                acc
+            });
             
             // Don't allow empty commands
             if command_str.trim().is_empty() {
