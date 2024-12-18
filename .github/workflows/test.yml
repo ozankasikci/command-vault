@@ -11,7 +11,18 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: windows-latest
+            shell: pwsh
+          - os: macos-latest
+            shell: bash
 
     steps:
     - uses: actions/checkout@v4
@@ -28,10 +39,15 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     
     - name: Build
       run: cargo build --verbose
+      shell: ${{ matrix.shell }}
     
     - name: Run tests
       run: cargo test --verbose
+      shell: ${{ matrix.shell }}
+      env:
+        # Set environment variables specific to each OS if needed
+        COMMAND_VAULT_TEST: 1
