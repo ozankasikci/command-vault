@@ -2,9 +2,11 @@ name: Test
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - '**'  # Run on all branches
   pull_request:
-    branches: [ main ]
+    branches:
+      - '**'  # Run on PRs targeting any branch
 
 env:
   CARGO_TERM_COLOR: always
