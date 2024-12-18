@@ -20,7 +20,11 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
 }
 
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell = if cfg!(windows) {
+        "cmd.exe".to_string()
+    } else {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+    };
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
     if ctx.test_mode {
@@ -63,12 +67,18 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
                 continue;
             }
 
-            let program = parts[0].clone();
-            let args = &parts[1..];
+            let command_str = parts.join(" ");
+            let mut command = if cfg!(windows) {
+                let mut cmd = std::process::Command::new("cmd.exe");
+                cmd.args(&["/C", &command_str]);
+                cmd
+            } else {
+                let mut cmd = std::process::Command::new(&parts[0]);
+                cmd.args(&parts[1..]);
+                cmd
+            };
 
-            let mut command = std::process::Command::new(&program);
             command
-                .args(args)
                 .current_dir(&ctx.directory)
                 .env("COMMAND_VAULT_TEST", "1")
                 .env("GIT_TERMINAL_PROMPT", "0")  // Disable git terminal prompts
@@ -112,8 +122,14 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             wrapped_command.to_string()
         };
 
+        let (shell_flag, cmd) = if cfg!(windows) {
+            ("/C", escaped_cmd)
+        } else {
+            ("-c", escaped_cmd)
+        };
+
         command
-            .args(&["-c", &escaped_cmd])
+            .args(&[shell_flag, &cmd])
             .current_dir(&ctx.directory)
             .env("SHELL", &shell)
             .envs(std::env::vars())

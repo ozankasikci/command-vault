@@ -289,20 +289,28 @@ fn test_exec_command_with_parameters() -> Result<()> {
     
     // Use current directory instead of temp dir for Windows compatibility
     let test_dir = std::env::current_dir()?;
+    eprintln!("Current directory: {:?}", test_dir);
     
     // Create a platform-specific echo command
     let echo_command = if cfg!(windows) {
+        eprintln!("Running on Windows");
         "cmd /c echo @message"
     } else {
+        eprintln!("Running on Unix");
         "echo @message"
     };
+    eprintln!("Command to execute: {}", echo_command);
     
     // Add a command with parameters
     let command = Command {
         id: None,
         command: echo_command.to_string(),
         timestamp: Utc::now(),
-        directory: test_dir.to_string_lossy().to_string(),
+        directory: {
+            let dir = test_dir.to_string_lossy().to_string();
+            eprintln!("Command directory: {}", dir);
+            dir
+        },
         tags: vec![],
         parameters: vec![Parameter::with_description(
             "message".to_string(),
@@ -310,13 +318,16 @@ fn test_exec_command_with_parameters() -> Result<()> {
         )],
     };
     let id = db.add_command(&command)?;
+    eprintln!("Command added with ID: {}", id);
     
     // Execute command with default parameter
     let exec_command = Commands::Exec { command_id: id };
+    eprintln!("Executing command with ID: {}", id);
     handle_command(exec_command, &mut db)?;
     
     // Verify command was saved correctly
     let saved = db.get_command(id)?.unwrap();
+    eprintln!("Retrieved command: {:?}", saved);
     assert_eq!(saved.parameters.len(), 1);
     assert_eq!(saved.parameters[0].name, "message");
     assert_eq!(saved.parameters[0].description, Some("test message".to_string()));
