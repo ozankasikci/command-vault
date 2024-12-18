@@ -50,6 +50,7 @@ fn test_parse_parameters_with_underscores() {
     assert_eq!(params[0].description, Some("new-user".to_string()));
 }
 
+#[cfg(not(coverage))]
 #[test]
 fn test_substitute_parameters() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("COMMAND_VAULT_TEST", "1");
@@ -69,6 +70,7 @@ fn test_substitute_parameters() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(not(coverage))]
 #[test]
 fn test_substitute_parameters_no_defaults() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("COMMAND_VAULT_TEST", "1");
