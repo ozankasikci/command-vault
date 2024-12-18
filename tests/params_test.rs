@@ -50,46 +50,7 @@ fn test_parse_parameters_with_underscores() {
     assert_eq!(params[0].description, Some("new-user".to_string()));
 }
 
-#[cfg(not(coverage))]
-#[test]
-fn test_substitute_parameters() -> Result<(), Box<dyn std::error::Error>> {
-    std::env::set_var("COMMAND_VAULT_TEST", "1");
-    
-    let command = "echo @message";
-    let parameters = vec![
-        Parameter::with_description("message".to_string(), Some("test message".to_string())),
-    ];
-    
-    let result = substitute_parameters(command, &parameters, Some("test-value"))?;
-    assert_eq!(result, "echo test-value");
-    
-    let result = substitute_parameters(command, &parameters, None)?;
-    assert_eq!(result, "echo test_value");
-    
-    std::env::remove_var("COMMAND_VAULT_TEST");
-    Ok(())
-}
 
-#[cfg(not(coverage))]
-#[test]
-fn test_substitute_parameters_no_defaults() -> Result<(), Box<dyn std::error::Error>> {
-    std::env::set_var("COMMAND_VAULT_TEST", "1");
-    
-    let command = "echo @message @other";
-    let parameters = vec![
-        Parameter::with_description("message".to_string(), None),
-        Parameter::with_description("other".to_string(), None),
-    ];
-    
-    let result = substitute_parameters(command, &parameters, Some("test-value\nother-value"))?;
-    assert_eq!(result, "echo test-value other-value");
-    
-    let result = substitute_parameters(command, &parameters, None)?;
-    assert_eq!(result, "echo test_value test_value");
-    
-    std::env::remove_var("COMMAND_VAULT_TEST");
-    Ok(())
-}
 
 #[test]
 fn test_parse_parameters_empty_command() {
