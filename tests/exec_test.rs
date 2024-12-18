@@ -36,11 +36,10 @@ mod tests {
     fn test_command_with_parameters() {
         let mut command = create_test_command("echo @message");
         command.parameters = vec![
-            Parameter {
-                name: "message".to_string(),
-                description: Some("Test message".to_string()),
-                default_value: Some("default".to_string()),
-            }
+            Parameter::with_description(
+                "message".to_string(),
+                Some("Test message".to_string())
+            ),
         ];
 
         // Set test mode to avoid interactive prompts
@@ -61,11 +60,10 @@ mod tests {
     fn test_command_with_quoted_parameters() {
         let mut command = create_test_command("echo @message");
         command.parameters = vec![
-            Parameter {
-                name: "message".to_string(),
-                description: Some("Test message".to_string()),
-                default_value: Some("hello world".to_string()),
-            }
+            Parameter::with_description(
+                "message".to_string(),
+                Some("Test message".to_string())
+            ),
         ];
 
         env::set_var("COMMAND_VAULT_TEST", "1");

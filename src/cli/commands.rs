@@ -44,9 +44,8 @@ fn print_commands(commands: &[Command]) -> Result<()> {
                 if !cmd.parameters.is_empty() {
                     println!("    Parameters:");
                     for param in &cmd.parameters {
-                        let desc = param.description.as_deref().unwrap_or("No description");
-                        let default = param.default_value.as_deref().unwrap_or("None");
-                        println!("      - {}: {} (default: {})", param.name, desc, default);
+                        let desc = param.description.as_deref().unwrap_or("None");
+                        println!("      - {}: {} (default: {})", param.name, desc, "None");
                     }
                 }
                 println!("    Directory: {}", cmd.directory);
@@ -147,15 +146,14 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             
             // If command has parameters, substitute them with user input
             let current_params = parse_parameters(&command_str);
-            substitute_parameters(&command_str, &current_params)?;
+            substitute_parameters(&command_str, &current_params, None)?;
             
             // If command has parameters, show them
             if !cmd.parameters.is_empty() {
                 print!("\nDetected parameters:");
-                for param in &cmd.parameters {
-                    let desc = param.description.as_deref().unwrap_or("No description");
-                    let default = param.default_value.as_deref().unwrap_or("None");
-                    print!("  - {}: {} (default: {})", param.name, desc, default);
+                for param in current_params.iter() {
+                    let desc = param.description.as_deref().unwrap_or("None");
+                    println!("  {} - Description: {}", param.name.yellow(), desc);
                 }
             }
         }
@@ -250,7 +248,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
             
             let current_params = parse_parameters(&command.command);
             let ctx = ExecutionContext {
-                command: substitute_parameters(&command.command, &current_params)?,
+                command: substitute_parameters(&command.command, &current_params, None)?,
                 directory: command.directory.clone(),
                 test_mode: false,
             };

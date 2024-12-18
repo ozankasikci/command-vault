@@ -59,17 +59,29 @@ pub struct Command {
 /// let param = Parameter {
 ///     name: "branch".to_string(),
 ///     description: Some("Git branch name".to_string()),
-///     default_value: Some("main".to_string()),
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
     /// Name of the parameter (used in substitution)
     pub name: String,
     
     /// Optional description of what the parameter does
     pub description: Option<String>,
-    
-    /// Optional default value for the parameter
-    pub default_value: Option<String>,
+}
+
+impl Parameter {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            description: None,
+        }
+    }
+
+    pub fn with_description(name: String, description: Option<String>) -> Self {
+        Self {
+            name,
+            description,
+        }
+    }
 }

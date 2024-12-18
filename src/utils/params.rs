@@ -5,49 +5,75 @@ use std::io::Write;
 use colored::*;
 use crossterm::{
     cursor::MoveTo,
-    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
+    terminal::{Clear, ClearType, disable_raw_mode},
     event::{self, Event, KeyCode, KeyModifiers},
     ExecutableCommand, QueueableCommand,
     style::Print,
 };
 use std::collections::HashMap;
+use std::io;
 
 const HEADER_LINE: u16 = 0;
 const SEPARATOR_LINE: u16 = 1;
 const PARAM_LINE: u16 = 3;
-const DEFAULT_LINE: u16 = 4;
-const INPUT_LINE: u16 = 5;
-const PREVIEW_SEPARATOR_LINE: u16 = 7;
-const COMMAND_LINE: u16 = 8;
-const WORKDIR_LINE: u16 = 9;
+const DEFAULT_LINE: u16 = 3;
+const INPUT_LINE: u16 = 4;
+const PREVIEW_SEPARATOR_LINE: u16 = 6;
+const COMMAND_LINE: u16 = 7;
+const WORKDIR_LINE: u16 = 8;
 
 pub fn parse_parameters(command: &str) -> Vec<Parameter> {
-    let re = Regex::new(r"@([a-zA-Z][a-zA-Z0-9_]*)(?:=([^\s]+))?").unwrap();
+    let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s]+))?").unwrap();
     let mut parameters = Vec::new();
     
     for cap in re.captures_iter(command) {
         let name = cap[1].to_string();
-        let default_value = cap.get(2).map(|m| m.as_str().to_string());
+        let description = cap.get(2).map(|m| m.as_str().to_string());
         
-        parameters.push(Parameter {
-            name,
-            description: None,
-            default_value,
-        });
+        parameters.push(Parameter::with_description(name, description));
     }
     
     parameters
 }
 
-pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<String> {
+pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input: Option<&str>) -> Result<String> {
     let mut final_command = command.to_string();
     let is_test = std::env::var("COMMAND_VAULT_TEST").is_ok();
     
-    // In test mode, just use default values without interactive UI
+    // In test mode, use provided test input or default test values
     if is_test {
-        for param in parameters {
-            let value = param.default_value.clone().unwrap_or_default();
-            final_command = final_command.replace(&format!("@{}", param.name), &value);
+        let test_values: Vec<&str> = test_input.map(|s| s.split('\n').collect()).unwrap_or_default();
+
+        for (index, param) in parameters.iter().enumerate() {
+            let value = if let Some(test_mode) = test_input {
+                if test_values.len() > index {
+                    test_values[index].to_string()
+                } else if test_mode.is_empty() {
+                    "".to_string()
+                } else {
+                    "test_value".to_string()
+                }
+            } else {
+                "test_value".to_string()
+            };
+
+            // Quote value if it contains spaces, special characters, or if it's part of a grep command
+            let needs_quotes = value.is_empty() || 
+                              value.contains(' ') || 
+                              value.contains('*') || 
+                              final_command.starts_with("grep");
+
+            let quoted_value = if needs_quotes {
+                format!("'{}'", value.replace('\'', "'\\''"))
+            } else {
+                value
+            };
+
+            // Replace parameter placeholders with the value
+            if let Some(desc) = &param.description {
+                final_command = final_command.replace(&format!("@{}:{}", param.name, desc), &quoted_value);
+            }
+            final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
         }
         return Ok(final_command);
     }
@@ -55,15 +81,11 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
     let mut stdout = std::io::stdout();
     let mut param_values: HashMap<String, String> = HashMap::new();
     
-    enable_raw_mode()?;
-    stdout.execute(Clear(ClearType::All))?;
-
     let result = (|| -> Result<String> {
         for param in parameters {
-            let default_str = param.default_value.as_deref().unwrap_or("");
             let desc = param.description.as_deref().unwrap_or("");
-            let mut input = default_str.to_string();
-            let mut cursor_pos = input.len();
+            let mut input = String::new();
+            let mut cursor_pos = 0;
 
             loop {
                 // Clear screen
@@ -84,13 +106,6 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                     stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
                 }
 
-                // Default value
-                stdout.queue(MoveTo(0, DEFAULT_LINE))?
-                      .queue(Print(format!("{}: [{}]", 
-                          "Default value".dimmed(), 
-                          default_str.bright_black()
-                      )))?;
-
                 // Input field
                 stdout.queue(MoveTo(0, INPUT_LINE))?
                       .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
@@ -102,8 +117,6 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                 }
                 if !input.is_empty() {
                     preview_command = preview_command.replace(&format!("@{}", param.name), &input);
-                } else if let Some(default) = &param.default_value {
-                    preview_command = preview_command.replace(&format!("@{}", param.name), default);
                 }
 
                 // Bottom separator
@@ -123,7 +136,7 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                           "Working directory".cyan().bold(), 
                           std::env::current_dir()?.to_string_lossy().white()
                       )))?;
-
+                
                 // Position cursor at input
                 let input_prompt = "Enter value: ";
                 stdout.queue(MoveTo(
@@ -163,13 +176,19 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
                 }
             }
 
-            let value = if input.is_empty() {
-                param.default_value.clone().unwrap_or_default()
+            let value = input;
+            let needs_quotes = value.is_empty() || 
+                              value.contains(' ') || 
+                              value.contains('*') || 
+                              command.starts_with("grep");
+
+            let quoted_value = if needs_quotes {
+                format!("'{}'", value.replace('\'', "'\\''"))
             } else {
-                input
+                value
             };
-            param_values.insert(param.name.clone(), value.clone());
-            final_command = final_command.replace(&format!("@{}", param.name), &value);
+            param_values.insert(param.name.clone(), quoted_value.clone());
+            final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
         }
 
         Ok(final_command)
@@ -187,8 +206,9 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter]) -> Result<
     match result {
         Ok(cmd) => {
             // Final display
-            println!("\n{}: {}", "Command to execute".blue().bold(), cmd.green());
+            println!("{}: {}", "Command to execute".blue().bold(), cmd.green());
             println!("{}: {}", "Working directory".cyan().bold(), std::env::current_dir()?.to_string_lossy().white());
+            io::stdout().flush()?;
             Ok(cmd)
         }
         Err(e) => Err(e)

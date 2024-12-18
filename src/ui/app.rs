@@ -101,7 +101,7 @@ impl<'a> App<'a> {
 
                                     // If command has parameters, substitute them with user input
                                     let current_params = parse_parameters(&cmd.command);
-                                    let final_command = substitute_parameters(&cmd.command, &current_params)?;
+                                    let final_command = substitute_parameters(&cmd.command, &current_params, None)?;
                                     let ctx = ExecutionContext {
                                         command: final_command,
                                         directory: cmd.directory.clone(),

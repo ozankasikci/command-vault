@@ -252,88 +252,38 @@ fn test_parameter_parsing() -> Result<()> {
     // Test basic parameter
     let command = Command {
         id: None,
-        command: "echo @name".to_string(),
+        command: "echo @message".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
         tags: vec![],
-        parameters: vec![Parameter {
-            name: "name".to_string(),
-            description: None,
-            default_value: None,
-        }],
+        parameters: vec![Parameter::with_description(
+            "message".to_string(),
+            Some("User_name".to_string())
+        )],
     };
     let id = db.add_command(&command)?;
     let saved = db.get_command(id)?.unwrap();
     assert_eq!(saved.parameters.len(), 1);
-    assert_eq!(saved.parameters[0].name, "name");
-    assert_eq!(saved.parameters[0].description, None);
-    assert_eq!(saved.parameters[0].default_value, None);
+    assert_eq!(saved.parameters[0].name, "message");
+    assert_eq!(saved.parameters[0].description, Some("User_name".to_string()));
     
     // Test parameter with description
     let command = Command {
         id: None,
-        command: "echo @name:User_name".to_string(),
+        command: "echo @message:User_name".to_string(),
         timestamp: Utc::now(),
         directory: "/test".to_string(),
         tags: vec![],
-        parameters: vec![Parameter {
-            name: "name".to_string(),
-            description: Some("User_name".to_string()),
-            default_value: None,
-        }],
+        parameters: vec![Parameter::with_description(
+            "message".to_string(),
+            Some("User_name".to_string())
+        )],
     };
     let id = db.add_command(&command)?;
     let saved = db.get_command(id)?.unwrap();
     assert_eq!(saved.parameters.len(), 1);
-    assert_eq!(saved.parameters[0].name, "name");
+    assert_eq!(saved.parameters[0].name, "message");
     assert_eq!(saved.parameters[0].description, Some("User_name".to_string()));
-    assert_eq!(saved.parameters[0].default_value, None);
-    
-    // Test parameter with description and default value
-    let command = Command {
-        id: None,
-        command: "echo @name:User_name=John".to_string(),
-        timestamp: Utc::now(),
-        directory: "/test".to_string(),
-        tags: vec![],
-        parameters: vec![Parameter {
-            name: "name".to_string(),
-            description: Some("User_name".to_string()),
-            default_value: Some("John".to_string()),
-        }],
-    };
-    let id = db.add_command(&command)?;
-    let saved = db.get_command(id)?.unwrap();
-    assert_eq!(saved.parameters.len(), 1);
-    assert_eq!(saved.parameters[0].name, "name");
-    assert_eq!(saved.parameters[0].description, Some("User_name".to_string()));
-    assert_eq!(saved.parameters[0].default_value, Some("John".to_string()));
-    
-    // Test multiple parameters
-    let command = Command {
-        id: None,
-        command: "echo @name:User_name=John @age:User_age=30".to_string(),
-        timestamp: Utc::now(),
-        directory: "/test".to_string(),
-        tags: vec![],
-        parameters: vec![
-            Parameter {
-                name: "name".to_string(),
-                description: Some("User_name".to_string()),
-                default_value: Some("John".to_string()),
-            },
-            Parameter {
-                name: "age".to_string(),
-                description: Some("User_age".to_string()),
-                default_value: Some("30".to_string()),
-            },
-        ],
-    };
-    let id = db.add_command(&command)?;
-    let saved = db.get_command(id)?.unwrap();
-    assert_eq!(saved.parameters.len(), 2);
-    assert_eq!(saved.parameters[0].name, "name");
-    assert_eq!(saved.parameters[1].name, "age");
     
     Ok(())
 }
@@ -354,11 +304,10 @@ fn test_exec_command_with_parameters() -> Result<()> {
         timestamp: Utc::now(),
         directory: test_dir.to_string_lossy().to_string(),
         tags: vec![],
-        parameters: vec![Parameter {
-            name: "message".to_string(),
-            description: None,
-            default_value: Some("test_message".to_string()),
-        }],
+        parameters: vec![Parameter::with_description(
+            "message".to_string(),
+            Some("test message".to_string())
+        )],
     };
     let id = db.add_command(&command)?;
     
@@ -370,7 +319,7 @@ fn test_exec_command_with_parameters() -> Result<()> {
     let saved = db.get_command(id)?.unwrap();
     assert_eq!(saved.parameters.len(), 1);
     assert_eq!(saved.parameters[0].name, "message");
-    assert_eq!(saved.parameters[0].default_value, Some("test_message".to_string()));
+    assert_eq!(saved.parameters[0].description, Some("test message".to_string()));
     
     Ok(())
 }
@@ -432,18 +381,18 @@ fn test_command_with_spaces_in_parameters() -> Result<()> {
         timestamp: Utc::now(),
         directory: "/test".to_string(),
         tags: vec!["test".to_string()],
-        parameters: vec![Parameter {
-            name: "message".to_string(),
-            description: Some("A test message".to_string()),
-            default_value: Some("Hello World".to_string()),
-        }],
+        parameters: vec![Parameter::with_description(
+            "message".to_string(),
+            Some("A test message".to_string())
+        )],
     };
     
     db.add_command(&command)?;
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].command, "echo @message");
-    assert_eq!(commands[0].parameters[0].default_value, Some("Hello World".to_string()));
+    assert_eq!(commands[0].parameters[0].name, "message");
+    assert_eq!(commands[0].parameters[0].description, Some("A test message".to_string()));
     Ok(())
 }
 
@@ -479,16 +428,14 @@ fn test_command_with_special_chars() -> Result<()> {
         directory: "/test".to_string(),
         tags: vec!["search".to_string()],
         parameters: vec![
-            Parameter {
-                name: "pattern".to_string(),
-                description: Some("Search pattern".to_string()),
-                default_value: Some("*.txt".to_string()),
-            },
-            Parameter {
-                name: "directory".to_string(),
-                description: Some("Directory to search in".to_string()),
-                default_value: Some("/path/with spaces/".to_string()),
-            },
+            Parameter::with_description(
+                "pattern".to_string(),
+                Some("Search pattern".to_string())
+            ),
+            Parameter::with_description(
+                "directory".to_string(),
+                Some("Directory to search in".to_string())
+            ),
         ],
     };
     
@@ -496,6 +443,9 @@ fn test_command_with_special_chars() -> Result<()> {
     let commands = db.list_commands(1, false)?;
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].parameters.len(), 2);
-    assert_eq!(commands[0].parameters[1].default_value, Some("/path/with spaces/".to_string()));
+    assert_eq!(commands[0].parameters[0].name, "pattern");
+    assert_eq!(commands[0].parameters[0].description, Some("Search pattern".to_string()));
+    assert_eq!(commands[0].parameters[1].name, "directory");
+    assert_eq!(commands[0].parameters[1].description, Some("Directory to search in".to_string()));
     Ok(())
 }

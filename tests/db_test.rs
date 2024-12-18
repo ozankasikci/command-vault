@@ -56,16 +56,14 @@ fn test_command_with_parameters() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
 
     let params = vec![
-        Parameter {
-            name: "file".to_string(),
-            description: Some("Target file".to_string()),
-            default_value: Some("test.txt".to_string()),
-        },
-        Parameter {
-            name: "mode".to_string(),
-            description: None,
-            default_value: None,
-        },
+        Parameter::with_description(
+            "file".to_string(),
+            Some("Target file".to_string())
+        ),
+        Parameter::with_description(
+            "mode".to_string(),
+            None
+        ),
     ];
 
     let cmd = Command {
@@ -83,10 +81,8 @@ fn test_command_with_parameters() -> Result<()> {
     assert_eq!(retrieved.parameters.len(), 2);
     assert_eq!(retrieved.parameters[0].name, "file");
     assert_eq!(retrieved.parameters[0].description, Some("Target file".to_string()));
-    assert_eq!(retrieved.parameters[0].default_value, Some("test.txt".to_string()));
     assert_eq!(retrieved.parameters[1].name, "mode");
     assert_eq!(retrieved.parameters[1].description, None);
-    assert_eq!(retrieved.parameters[1].default_value, None);
 
     Ok(())
 }
