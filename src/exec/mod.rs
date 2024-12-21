@@ -121,6 +121,10 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit());
 
+        println!("{} {}", "Running command:".yellow(), &command.get_program().to_string_lossy());
+        // pring arguments too
+        println!("Arguments: {:?}", command.get_args());
+
         let status = command.status()?;
 
         if !status.success() {
