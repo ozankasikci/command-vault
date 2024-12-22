@@ -1,9 +1,10 @@
 use anyhow::Result;
+use chrono::{TimeZone, Utc};
 use command_vault::{
     db::Command,
-    ui::app::App,
+    ui::{app::App, AddCommandApp},
 };
-use std::io;
+use crate::test_utils::create_test_db;
 
 mod test_utils;
 

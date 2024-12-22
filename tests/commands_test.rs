@@ -447,6 +447,7 @@ fn test_handle_command_debug() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     let temp_dir = tempdir()?;
     let test_dir = temp_dir.path().canonicalize()?;
+    std::env::set_current_dir(&test_dir)?;
     
     // First add a simple command that works in any shell
     let add_command = Commands::Add {

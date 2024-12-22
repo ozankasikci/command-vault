@@ -1,24 +1,16 @@
-use crate::db::models::Parameter;
-use regex::Regex;
-use anyhow::{Result, anyhow};
-use std::io::Write;
+use anyhow::Result;
 use colored::*;
 use crossterm::{
     cursor::MoveTo,
-    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode},
     QueueableCommand,
     style::Print,
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
-use std::collections::HashMap;
+use regex::Regex;
+use std::{collections::HashMap, io::{stdout, Write}};
 
-const HEADER_LINE: u16 = 0;
-const SEPARATOR_LINE: u16 = 1;
-const PARAM_LINE: u16 = 2;
-const INPUT_LINE: u16 = 3;
-const PREVIEW_SEPARATOR_LINE: u16 = 4;
-const COMMAND_LINE: u16 = 5;
-const WORKDIR_LINE: u16 = 6;
+use crate::db::models::Parameter;
 
 pub fn parse_parameters(command: &str) -> Vec<Parameter> {
     let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s]+))?").unwrap();
@@ -27,7 +19,6 @@ pub fn parse_parameters(command: &str) -> Vec<Parameter> {
     for cap in re.captures_iter(command) {
         let name = cap[1].to_string();
         let description = cap.get(2).map(|m| m.as_str().to_string());
-        
         parameters.push(Parameter::with_description(name, description));
     }
     
@@ -35,32 +26,28 @@ pub fn parse_parameters(command: &str) -> Vec<Parameter> {
 }
 
 pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input: Option<&str>) -> Result<String> {
-    let mut final_command = command.to_string();
-    let is_test = std::env::var("COMMAND_VAULT_TEST").is_ok();
-    
-    // In test mode, use provided test input or default test values
+    let is_test = test_input.is_some() || std::env::var("COMMAND_VAULT_TEST").is_ok();
     if is_test {
-        let test_values: Vec<&str> = test_input.map(|s| s.split('\n').collect()).unwrap_or_default();
-
-        for (index, param) in parameters.iter().enumerate() {
-            let value = if let Some(test_mode) = test_input {
-                if test_values.len() > index {
-                    let value = test_values[index].to_string();
-                    if value.is_empty() && param.description.is_some() {
-                        param.description.as_ref().unwrap().clone()
-                    } else {
-                        value
-                    }
-                } else if test_mode.is_empty() {
-                    param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
-                } else {
-                    "test_value".to_string()
-                }
+        let mut final_command = command.to_string();
+        let test_values: Vec<&str> = if let Some(input) = test_input {
+            if input.is_empty() {
+                parameters.iter()
+                    .map(|p| p.description.as_deref().unwrap_or(""))
+                    .collect()
             } else {
-                "test_value".to_string()
+                input.split('\n').collect()
+            }
+        } else {
+            vec!["test_value"; parameters.len()]
+        };
+
+        for (i, param) in parameters.iter().enumerate() {
+            let value = if i < test_values.len() {
+                test_values[i]
+            } else {
+                param.description.as_deref().unwrap_or("")
             };
 
-            // Quote value if it contains spaces, special characters, or if it's part of a grep command
             let needs_quotes = value.is_empty() || 
                              value.contains(' ') || 
                              value.contains('*') || 
@@ -73,139 +60,94 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
             let quoted_value = if needs_quotes && !value.starts_with('\'') && !value.starts_with('"') {
                 format!("'{}'", value.replace('\'', "'\\''"))
             } else {
-                value
+                value.to_string()
             };
 
-            // Replace parameter placeholders with the value
-            if let Some(desc) = &param.description {
-                final_command = final_command.replace(&format!("@{}:{}", param.name, desc), &quoted_value);
-            }
             final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
+            
+            // Remove the description part from the command
+            if let Some(desc) = &param.description {
+                final_command = final_command.replace(&format!(":{}", desc), "");
+            }
         }
-        return Ok(final_command);
+        Ok(final_command)
+    } else {
+        prompt_parameters(command, parameters, test_input)
     }
+}
 
-    // Interactive mode for non-test environment
-    let mut stdout = std::io::stdout();
-    let mut param_values: HashMap<String, String> = HashMap::new();
-    
-    // Only enable raw mode if not in test mode
-    if !is_test {
-        enable_raw_mode()?;
-    }
-    
+pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Option<&str>) -> Result<String> {
+    let is_test = test_input.is_some() || std::env::var("COMMAND_VAULT_TEST").is_ok();
     let result = (|| -> Result<String> {
-        let mut stdout = std::io::stdout();
-        let mut param_values: HashMap<String, String> = HashMap::new();
-        
-        // Only show UI in non-test mode
         if !is_test {
-            // Clear screen and show header
-            stdout.queue(Clear(ClearType::All))?;
-            stdout.queue(MoveTo(0, HEADER_LINE))?
-                  .queue(Print("Enter values for command parameters:"))?;
-            stdout.queue(MoveTo(0, SEPARATOR_LINE))?
-                  .queue(Print("─".repeat(45).dimmed()))?;
-            stdout.flush()?;
+            enable_raw_mode()?;
         }
+
+        let mut stdout = stdout();
+        let mut param_values = HashMap::new();
 
         for param in parameters {
-            let desc = param.description.as_deref().unwrap_or("");
-            let mut input = String::new();
-            let mut cursor_pos = 0;
+            let value = if let Some(input) = test_input {
+                input.to_string()
+            } else if is_test {
+                "test_value".to_string()
+            } else {
+                stdout.queue(Clear(ClearType::All))?;
+                stdout.queue(MoveTo(0, 0))?
+                      .queue(Print("─".repeat(45).dimmed()))?;
+                stdout.queue(MoveTo(0, 1))?
+                      .queue(Print(format!("{}: {}", 
+                          "Parameter".blue().bold(), 
+                          param.name.green()
+                      )))?;
+                if let Some(desc) = &param.description {
+                    stdout.queue(MoveTo(0, 2))?
+                          .queue(Print(format!("{}: {}", 
+                              "Description".cyan().bold(), 
+                              desc.white()
+                          )))?;
+                }
+                stdout.queue(MoveTo(0, 3))?
+                      .queue(Print(format!("{}: ", "Enter value".yellow().bold())))?;
+                stdout.flush()?;
 
-            // Only show UI and handle input in non-test mode
-            if !is_test {
+                let mut value = String::new();
+                let mut cursor_pos = 0;
+
                 loop {
-                    // Parameter info
-                    stdout.queue(MoveTo(0, PARAM_LINE))?
-                          .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
-                    if !desc.is_empty() {
-                        stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
-                    }
-
-                    // Input field
-                    stdout.queue(MoveTo(0, INPUT_LINE))?
-                          .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
-
-                    // Preview section
-                    let mut preview_command = command.to_string();
-                    for (param_name, value) in &param_values {
-                        preview_command = preview_command.replace(&format!("@{}", param_name), value);
-                    }
-                    if !input.is_empty() {
-                        preview_command = preview_command.replace(&format!("@{}", param.name), &input);
-                    }
-
-                    // Bottom separator
-                    stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
-                          .queue(Print("─".repeat(45).dimmed()))?;
-
-                    // Command preview section with softer colors
-                    stdout.queue(MoveTo(0, COMMAND_LINE))?
-                          .queue(Print(format!("{}: {}", 
-                              "Command to execute".blue().bold(), 
-                              preview_command.green()
-                          )))?;
-
-                    // Working directory with softer colors
-                    stdout.queue(MoveTo(0, WORKDIR_LINE))?
-                          .queue(Print(format!("{}: {}", 
-                              "Working directory".cyan().bold(), 
-                              std::env::current_dir()?.to_string_lossy().white()
-                          )))?;
-
-                    // Position cursor at input
-                    stdout.queue(MoveTo(
-                        ("Enter value: ".len() + cursor_pos) as u16,
-                        INPUT_LINE
-                    ))?;
-                    
-                    stdout.flush()?;
-
                     if let Event::Key(key) = event::read()? {
-                        match (key.code, key.modifiers) {
-                            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                                return Err(anyhow!("Operation cancelled by user"));
-                            },
-                            (KeyCode::Enter, _) => break,
-                            (KeyCode::Char(c), _) => {
-                                input.insert(cursor_pos, c);
+                        match key.code {
+                            KeyCode::Enter => break,
+                            KeyCode::Char(c) => {
+                                value.insert(cursor_pos, c);
                                 cursor_pos += 1;
                             }
-                            (KeyCode::Backspace, _) if cursor_pos > 0 => {
-                                input.remove(cursor_pos - 1);
+                            KeyCode::Backspace if cursor_pos > 0 => {
+                                value.remove(cursor_pos - 1);
                                 cursor_pos -= 1;
                             }
-                            (KeyCode::Left, _) if cursor_pos > 0 => {
+                            KeyCode::Left if cursor_pos > 0 => {
                                 cursor_pos -= 1;
                             }
-                            (KeyCode::Right, _) if cursor_pos < input.len() => {
+                            KeyCode::Right if cursor_pos < value.len() => {
                                 cursor_pos += 1;
-                            }
-                            (KeyCode::Esc, _) => {
-                                input.clear();
-                                break;
                             }
                             _ => {}
                         }
-                    }
-                }
-            }
 
-            let value = if is_test {
-                // In test mode, use test input or default values
-                if let Some(test_mode) = test_input {
-                    if test_mode.is_empty() {
-                        param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
-                    } else {
-                        test_mode.to_string()
+                        // Redraw the value line
+                        stdout.queue(MoveTo(0, 3))?
+                              .queue(Clear(ClearType::CurrentLine))?
+                              .queue(Print(format!("{}: {}", 
+                                  "Enter value".yellow().bold(), 
+                                  value
+                              )))?;
+                        stdout.queue(MoveTo((cursor_pos + 13) as u16, 3))?;
+                        stdout.flush()?;
                     }
-                } else {
-                    "test_value".to_string()
                 }
-            } else {
-                input
+
+                value
             };
 
             param_values.insert(param.name.clone(), value);
@@ -213,19 +155,20 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
 
         // Show final command info
         if !is_test {
-            stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
+            stdout.queue(Clear(ClearType::All))?;
+            stdout.queue(MoveTo(0, 0))?
                   .queue(Print("─".repeat(45).dimmed()))?;
-            stdout.queue(MoveTo(0, COMMAND_LINE))?
+            stdout.queue(MoveTo(0, 1))?
                   .queue(Print(format!("{}: {}", 
                       "Command to execute".blue().bold(), 
                       command.green()
                   )))?;
-            stdout.queue(MoveTo(0, WORKDIR_LINE))?
+            stdout.queue(MoveTo(0, 2))?
                   .queue(Print(format!("{}: {}", 
                       "Working directory".cyan().bold(), 
                       std::env::current_dir()?.to_string_lossy().white()
                   )))?;
-            stdout.queue(MoveTo(0, WORKDIR_LINE + 2))?;  // Add extra newline
+            stdout.queue(MoveTo(0, 4))?;  // Add extra newline
             stdout.flush()?;
         }
 
@@ -256,8 +199,8 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
     // Always ensure raw mode is disabled and cursor is reset
     if !is_test {
         let _ = disable_raw_mode();
-        let _ = stdout.queue(MoveTo(0, 0));
-        let _ = stdout.flush();
+        let _ = stdout().queue(MoveTo(0, 0));
+        let _ = stdout().flush();
     }
 
     result
