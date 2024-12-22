@@ -29,7 +29,14 @@ mod tests {
         let mut command = create_test_command("pwd");
         command.directory = temp_dir.path().to_string_lossy().to_string();
         
-        assert!(execute_command(&command).is_ok());
+        // Set test mode and debug mode to help diagnose issues
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        env::set_var("COMMAND_VAULT_DEBUG", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        env::remove_var("COMMAND_VAULT_DEBUG");
+        
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
     }
 
     #[test]

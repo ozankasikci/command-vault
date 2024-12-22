@@ -58,7 +58,20 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     command.arg(&wrapped_command)
            .current_dir(&ctx.directory);
 
+    if ctx.debug_mode {
+        println!("Command: {:?}", command);
+        println!("Working directory: {}", ctx.directory);
+    }
+
     let output = command.output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "Command failed with status: {}. stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
 
     if ctx.debug_mode {
         if !ctx.test_mode {
@@ -75,6 +88,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
 
 pub fn execute_command(command: &Command) -> Result<()> {
     let test_mode = std::env::var("COMMAND_VAULT_TEST").is_ok();
+    let debug_mode = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
     let current_params = crate::utils::params::parse_parameters(&command.command);
     let mut final_command = crate::utils::params::substitute_parameters(&command.command, &current_params, None)?;
 
@@ -112,7 +126,7 @@ pub fn execute_command(command: &Command) -> Result<()> {
         command: final_command,
         directory: command.directory.clone(),
         test_mode,
-        debug_mode: false, // default debug mode to false
+        debug_mode,
     };
 
     execute_shell_command(&ctx)
