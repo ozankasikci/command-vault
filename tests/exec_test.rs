@@ -119,32 +119,35 @@ mod tests {
 
     #[test]
     fn test_command_with_parameters() -> std::io::Result<()> {
+        // Create and verify temp directory
         let (temp_dir, temp_path) = get_safe_temp_dir()?;
         let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
+        // Ensure the directory exists and is accessible
+        ensure_directory_exists(&temp_path)?;
+        
+        // Set up test environment with a known test value
+        setup_test_env();
+        env::set_var("COMMAND_VAULT_TEST_INPUT", "test_message");
+        
         // Create a simple command that just echoes the parameter
         let mut command = create_test_command("echo @message");
-        command.directory = dir_path.clone();
+        command.directory = dir_path;
         command.parameters = vec![
             Parameter {
                 name: "message".to_string(),
                 description: Some("Test message".to_string()),
             },
         ];
-
-        // Set up test environment with a known test value
-        setup_test_env();
-        env::set_var("COMMAND_VAULT_TEST_INPUT", "test_message");
         
-        // Execute the command
+        // Execute the command and verify it succeeds
         let result = execute_command(&command);
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
         
         // Clean up
         cleanup_test_env();
         drop(temp_dir);
         
-        // Verify the result
-        assert!(result.is_ok(), "Command failed: {:?}", result.err());
         Ok(())
     }
 
