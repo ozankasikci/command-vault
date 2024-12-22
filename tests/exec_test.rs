@@ -2,7 +2,7 @@ use command_vault::exec::execute_command;
 use command_vault::db::models::{Command, Parameter};
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use tempfile::TempDir;
 use chrono::Utc;
 
@@ -29,20 +29,30 @@ mod tests {
         env::remove_var("COMMAND_VAULT_TEST");
     }
 
+    fn get_safe_temp_dir() -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_path_buf();
+        fs::create_dir_all(&temp_path).unwrap();
+        (temp_dir, temp_path)
+    }
+
     #[test]
     fn test_basic_command_execution() {
         let mut command = create_test_command("echo 'hello world'");
-        command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
+        command.directory = temp_path.to_string_lossy().to_string();
+        
         setup_test_env();
         let result = execute_command(&command);
         cleanup_test_env();
+        
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_working_directory() {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().canonicalize().unwrap();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
         
         let mut command = create_test_command("pwd");
         command.directory = temp_path.to_string_lossy().to_string();
@@ -52,12 +62,14 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_parameters() {
         let mut command = create_test_command("echo '@message'");
-        command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
+        command.directory = temp_path.to_string_lossy().to_string();
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -72,12 +84,14 @@ mod tests {
         env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_quoted_parameters() {
         let mut command = create_test_command("echo '@message'");
-        command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
+        command.directory = temp_path.to_string_lossy().to_string();
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -92,12 +106,14 @@ mod tests {
         env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_multiple_env_vars() {
         let mut command = create_test_command("echo \"$TEST_VAR1 $TEST_VAR2 $TEST_VAR3\"");
-        command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
+        command.directory = temp_path.to_string_lossy().to_string();
         env::set_var("TEST_VAR1", "value1");
         env::set_var("TEST_VAR2", "value2");
         env::set_var("TEST_VAR3", "value3");
@@ -110,12 +126,12 @@ mod tests {
         env::remove_var("TEST_VAR3");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_directory_traversal() {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().canonicalize().unwrap();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
         let attempted_path = temp_path.join("../../../etc");
         
         let mut command = create_test_command("pwd");
@@ -125,13 +141,14 @@ mod tests {
         let result = execute_command(&command);
         cleanup_test_env();
         
+        // The command should fail because we don't allow directory traversal
         assert!(result.is_err(), "Directory traversal should be prevented");
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_readonly_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().canonicalize().unwrap();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
         
         // Create a readonly file
         let readonly_file = temp_path.join("readonly.txt");
@@ -150,43 +167,46 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_long_output() {
         let mut command = create_test_command("yes 'test' | head -n 100");
-        command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+        let (temp_dir, temp_path) = get_safe_temp_dir();
+        command.directory = temp_path.to_string_lossy().to_string();
         
         setup_test_env();
         let result = execute_command(&command);
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir); // Ensure cleanup
     }
 
     #[test]
     fn test_command_with_special_shell_chars() {
+        let (temp_dir, temp_path) = get_safe_temp_dir();
         let special_chars = vec![
-            "echo 'test > file'",
-            "echo 'test < file'",
-            "echo 'test | grep test'",
-            "echo 'test ; echo more'",
-            "echo 'test && echo more'",
-            "echo 'test || echo more'",
-            "echo 'test $(echo more)'",
-            "echo 'test `echo more`'",
-            "echo 'test # comment'",
+            "echo test",  // Basic test
+            "echo test > /dev/null",  // Redirection
+            "echo test | cat",  // Pipeline
+            "echo test1; echo test2",  // Command separator
+            "echo test1 && echo test2",  // AND operator
+            "echo test1 || echo test2",  // OR operator
+            "echo $(echo test)",  // Command substitution
+            "echo `echo test`",  // Backtick substitution
+            "echo test # comment",  // Comment
         ];
 
         for cmd in special_chars {
             let mut command = create_test_command(cmd);
-            command.directory = env::current_dir().unwrap().to_string_lossy().to_string();
+            command.directory = temp_path.to_string_lossy().to_string();
             setup_test_env();
             let result = execute_command(&command);
             cleanup_test_env();
             assert!(result.is_ok(), "Command failed: {:?} for input: {}", result.err(), cmd);
         }
+        drop(temp_dir); // Ensure cleanup
     }
-
-    // ... keep other tests unchanged ...
 }
