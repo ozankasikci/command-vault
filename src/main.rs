@@ -1,9 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
-use cli::args::Cli;
-use cli::commands::handle_command;
-use crate::db::store::Database;
-use colored::*;
+use command_vault::{
+    cli::{args::Cli, commands::handle_command},
+    db::store::Database,
+};
+use std::path::PathBuf;
 
 mod cli;
 mod db;

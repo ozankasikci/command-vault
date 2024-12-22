@@ -14,12 +14,11 @@ use std::collections::HashMap;
 
 const HEADER_LINE: u16 = 0;
 const SEPARATOR_LINE: u16 = 1;
-const PARAM_LINE: u16 = 3;
-const DEFAULT_LINE: u16 = 3;
-const INPUT_LINE: u16 = 4;
-const PREVIEW_SEPARATOR_LINE: u16 = 6;
-const COMMAND_LINE: u16 = 7;
-const WORKDIR_LINE: u16 = 8;
+const PARAM_LINE: u16 = 2;
+const INPUT_LINE: u16 = 3;
+const PREVIEW_SEPARATOR_LINE: u16 = 4;
+const COMMAND_LINE: u16 = 5;
+const WORKDIR_LINE: u16 = 6;
 
 pub fn parse_parameters(command: &str) -> Vec<Parameter> {
     let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s]+))?").unwrap();
