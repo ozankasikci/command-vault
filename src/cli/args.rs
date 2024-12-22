@@ -5,6 +5,10 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// Enable debug mode to see detailed command execution information
+    #[arg(short, long)]
+    pub debug: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -30,6 +34,10 @@ pub enum Commands {
     Exec {
         /// Command ID to execute
         command_id: i64,
+        
+        /// Enable debug mode
+        #[arg(long)]
+        debug: bool,
     },
     /// Search through command history
     Search {

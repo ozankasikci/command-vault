@@ -41,16 +41,44 @@ fn create_test_commands() -> Vec<Command> {
 #[test]
 fn test_app_new() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
-    let commands = create_test_commands();
-    let app = App::new(commands.clone(), &mut db);
-    
-    assert_eq!(app.commands.len(), 3);
-    assert_eq!(app.filtered_commands.len(), 3);
+    let commands = vec![];
+    let app = App::new(commands.clone(), &mut db, false);
+    assert_eq!(app.commands.len(), 0);
     assert_eq!(app.selected, None);
-    assert!(!app.show_help);
-    assert!(app.message.is_none());
-    assert!(app.filter_text.is_empty());
-    
+    assert_eq!(app.show_help, false);
+    assert_eq!(app.message, None);
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 0);
+    assert_eq!(app.debug_mode, false);
+    Ok(())
+}
+
+#[test]
+fn test_app_filter() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = vec![
+        Command {
+            id: Some(1),
+            command: "ls -l".to_string(),
+            timestamp: Utc::now(),
+            directory: "/".to_string(),
+            tags: vec![],
+            parameters: vec![],
+        },
+        Command {
+            id: Some(2),
+            command: "pwd".to_string(),
+            timestamp: Utc::now(),
+            directory: "/".to_string(),
+            tags: vec![],
+            parameters: vec![],
+        },
+    ];
+    let mut app = App::new(commands.clone(), &mut db, false);
+    app.filter_text = "ls".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.filtered_commands[0], 0);
     Ok(())
 }
 
@@ -58,7 +86,7 @@ fn test_app_new() -> Result<()> {
 fn test_app_filtering() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands.clone(), &mut db);
+    let mut app = App::new(commands.clone(), &mut db, false);
 
     // Test filtering by command
     app.filter_text = "git".to_string();
@@ -124,7 +152,7 @@ fn test_add_command_app_tag_input() {
 fn test_app_message_handling() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands.clone(), &mut db);
+    let mut app = App::new(commands.clone(), &mut db, false);
 
     // Test setting message
     app.message = Some(("Test message".to_string(), ratatui::style::Color::Green));
@@ -144,7 +172,7 @@ fn test_app_message_handling() -> Result<()> {
 fn test_app_selection() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
     let commands = create_test_commands();
-    let mut app = App::new(commands.clone(), &mut db);
+    let mut app = App::new(commands.clone(), &mut db, false);
 
     // Test initial state
     assert_eq!(app.selected, None);

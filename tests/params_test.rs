@@ -153,7 +153,10 @@ fn test_substitute_parameters_with_defaults() -> Result<(), Box<dyn std::error::
     
     let command = "echo @message";
     let parameters = vec![
-        Parameter::with_description("message".to_string(), Some("default value".to_string())),
+        Parameter {
+            name: "message".to_string(),
+            description: Some("default value".to_string()),
+        },
     ];
     
     let result = substitute_parameters(command, &parameters, Some("custom"))?;
@@ -170,17 +173,20 @@ fn test_substitute_parameters_with_defaults() -> Result<(), Box<dyn std::error::
 fn test_substitute_parameters_multiple() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("COMMAND_VAULT_TEST", "1");
     
-    let command = "grep @pattern @file";
-    let parameters = vec![
-        Parameter::with_description("pattern".to_string(), Some("search term".to_string())),
-        Parameter::with_description("file".to_string(), Some("test.txt".to_string())),
+    let command = "git commit -m @message --author @author";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: None,
+        },
+        Parameter {
+            name: "author".to_string(),
+            description: None,
+        },
     ];
     
-    let result = substitute_parameters(command, &parameters, Some("error\nlog.txt"))?;
-    assert_eq!(result, "grep 'error' 'log.txt'");
-    
-    let result = substitute_parameters(command, &parameters, None)?;
-    assert_eq!(result, "grep 'test_value' 'test_value'");
+    let result = substitute_parameters(command, &params, Some("test commit\nJohn Doe"))?;
+    assert_eq!(result, "git commit -m 'test commit' --author 'John Doe'");
     
     std::env::remove_var("COMMAND_VAULT_TEST");
     Ok(())

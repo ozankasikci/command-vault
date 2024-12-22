@@ -184,12 +184,37 @@ fn test_exec_command_parsing() -> Result<()> {
     ])?;
 
     match args.command {
-        Commands::Exec { command_id } => {
+        Commands::Exec { command_id, debug } => {
             assert_eq!(command_id, 42);
+            assert_eq!(debug, false);
         }
         _ => panic!("Expected Exec command"),
     }
     Ok(())
+}
+
+#[test]
+fn test_parse_exec_command() {
+    let args = vec!["command-vault", "exec", "123"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::Exec { command_id, debug } => {
+            assert_eq!(command_id, 123);
+            assert_eq!(debug, false);
+        }
+        _ => panic!("Expected Exec command"),
+    }
+
+    // Test with debug flag
+    let args = vec!["command-vault", "exec", "123", "--debug"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::Exec { command_id, debug } => {
+            assert_eq!(command_id, 123);
+            assert_eq!(debug, true);
+        }
+        _ => panic!("Expected Exec command"),
+    }
 }
 
 #[test]

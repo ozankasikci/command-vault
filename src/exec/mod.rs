@@ -9,6 +9,7 @@ pub struct ExecutionContext {
     pub command: String,
     pub directory: String,
     pub test_mode: bool,
+    pub debug_mode: bool,
 }
 
 pub fn wrap_command(command: &str, test_mode: bool) -> String {
@@ -33,7 +34,11 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
 }
 
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell = if ctx.test_mode {
+        "/bin/sh".to_string()
+    } else {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+    };
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
     if ctx.test_mode {
@@ -130,9 +135,11 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit());
 
-        println!("{} {}", "Running command:".yellow(), &command.get_program().to_string_lossy());
-        // pring arguments too
-        println!("Arguments: {:?}", command.get_args());
+        // Only print debug information if debug mode is enabled
+        if ctx.debug_mode {
+            println!("{} {}", "Running command:".yellow(), &command.get_program().to_string_lossy());
+            println!("{} {:?}", "Arguments:".yellow(), command.get_args());
+        }
 
         let status = command.status()?;
 
@@ -183,6 +190,7 @@ pub fn execute_command(command: &Command) -> Result<()> {
         command: final_command,
         directory: command.directory.clone(),
         test_mode,
+        debug_mode: false, // default debug mode to false
     };
 
     execute_shell_command(&ctx)

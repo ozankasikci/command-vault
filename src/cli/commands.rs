@@ -18,9 +18,10 @@ use colored::*;
 use crate::db::{Command, Database};
 use crate::ui::App;
 use crate::utils::params::parse_parameters;
-use super::args::{Commands, TagCommands};
 use crate::utils::params::substitute_parameters;
 use crate::exec::{ExecutionContext, execute_shell_command};
+
+use super::args::{Commands, TagCommands};
 
 fn print_commands(commands: &[Command]) -> Result<()> {
     let terminal_result = setup_terminal();
@@ -112,7 +113,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     Ok(())
 }
 
-pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
+pub fn handle_command(command: Commands, db: &mut Database, debug: bool) -> Result<()> {
     match command {
         Commands::Add { command, tags } => {
             // Preserve quotes in arguments that need them
@@ -180,7 +181,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
         }
         Commands::Search { query, limit } => {
             let commands = db.search_commands(&query, limit)?;
-            let mut app = App::new(commands.clone(), db);
+            let mut app = App::new(commands.clone(), db, debug);
             match app.run() {
                 Ok(_) => (),
                 Err(e) => {
@@ -208,7 +209,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 return Ok(());
             }
 
-            let mut app = App::new(commands.clone(), db);
+            let mut app = App::new(commands.clone(), db, debug);
             match app.run() {
                 Ok(_) => (),
                 Err(e) => {
@@ -258,7 +259,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 }
             }
         },
-        Commands::Exec { command_id } => {
+        Commands::Exec { command_id, debug } => {
             let command = db.get_command(command_id)?
                 .ok_or_else(|| anyhow!("Command not found with ID: {}", command_id))?;
             
@@ -272,6 +273,7 @@ pub fn handle_command(command: Commands, db: &mut Database) -> Result<()> {
                 command: substitute_parameters(&command.command, &current_params, None)?,
                 directory: command.directory.clone(),
                 test_mode: false,
+                debug_mode: debug,
             };
             execute_shell_command(&ctx)?;
         }

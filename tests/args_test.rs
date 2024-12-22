@@ -58,8 +58,20 @@ fn test_parse_args_exec() {
     let args = vec!["cv", "exec", "1"];
     let cli = Cli::parse_from(args);
     match cli.command {
-        Commands::Exec { command_id } => {
+        Commands::Exec { command_id, debug } => {
             assert_eq!(command_id, 1);
+            assert_eq!(debug, false); // Default value should be false
+        }
+        _ => panic!("Expected Exec command"),
+    }
+
+    // Test with debug flag
+    let args = vec!["cv", "exec", "1", "--debug"];
+    let cli = Cli::parse_from(args);
+    match cli.command {
+        Commands::Exec { command_id, debug } => {
+            assert_eq!(command_id, 1);
+            assert_eq!(debug, true);
         }
         _ => panic!("Expected Exec command"),
     }

@@ -27,10 +27,11 @@ pub struct App<'a> {
     pub filtered_commands: Vec<usize>,
     pub db: &'a mut Database,
     pub confirm_delete: Option<usize>, // Index of command pending deletion
+    pub debug_mode: bool,
 }
 
 impl<'a> App<'a> {
-    pub fn new(commands: Vec<Command>, db: &'a mut Database) -> App<'a> {
+    pub fn new(commands: Vec<Command>, db: &'a mut Database, debug_mode: bool) -> App<'a> {
         let filtered_commands: Vec<usize> = (0..commands.len()).collect();
         App {
             commands,
@@ -41,6 +42,7 @@ impl<'a> App<'a> {
             filtered_commands,
             db,
             confirm_delete: None,
+            debug_mode,
         }
     }
 
@@ -141,6 +143,7 @@ impl<'a> App<'a> {
                                         command: final_command,
                                         directory: cmd.directory.clone(),
                                         test_mode: false,
+                                        debug_mode: self.debug_mode,
                                     };
                                     execute_shell_command(&ctx)?;
                                     
