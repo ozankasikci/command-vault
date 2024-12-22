@@ -15,8 +15,8 @@ pub struct ExecutionContext {
 
 pub fn wrap_command(command: &str, test_mode: bool) -> String {
     if test_mode {
-        // In test mode, just return the command as is
-        command.to_string()
+        // In test mode, set the test environment variable
+        format!("export COMMAND_VAULT_TEST=1; {}", command)
     } else {
         // For interactive mode, handle shell initialization
         let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
