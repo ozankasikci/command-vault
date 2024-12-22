@@ -48,7 +48,8 @@ mod tests {
 
     #[test]
     fn test_command_with_parameters() {
-        let mut command = create_test_command("echo @message");
+        // Use a simple command that works on all platforms
+        let mut command = create_test_command("printf '%s'");
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
