@@ -15,15 +15,12 @@ pub struct ExecutionContext {
 
 pub fn wrap_command(command: &str, test_mode: bool) -> String {
     if test_mode {
+        // In test mode, just return the command as is
         command.to_string()
     } else {
-        // Detect the current shell and source appropriate config
+        // For interactive mode, handle shell initialization
         let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
-        // Remove any surrounding quotes from the command and replace && with && echo -e '\n'
-        let clean_command = command
-            .trim_matches('"')
-            .replace(" && ", " && echo -e '\\n' && ")
-            .to_string();
+        let clean_command = command.trim_matches('"').to_string();
             
         match shell_type.as_str() {
             "zsh" => format!(
@@ -39,100 +36,73 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
 }
 
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
+    // Always use /bin/sh in test mode, otherwise use the user's shell
     let shell = if ctx.test_mode {
         "/bin/sh".to_string()
     } else {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
     };
+
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
     if ctx.debug_mode {
         println!("Running command: {}", shell);
+        println!("Working directory: {}", ctx.directory);
+        println!("Wrapped command: {}", wrapped_command);
     }
 
-    // In test mode, execute commands directly
+    // Create command with the appropriate shell
     let mut command = ProcessCommand::new(&shell);
     
+    // In test mode, use simple shell execution
     if ctx.test_mode {
-        command.arg("-c");
+        command.args(&["-c", &wrapped_command]);
     } else {
-        command.arg("-i").arg("-l").arg("-c");
+        command.args(&["-i", "-l", "-c", &wrapped_command]);
     }
     
-    command.arg(&wrapped_command)
-           .current_dir(&ctx.directory);
+    // Set working directory
+    command.current_dir(&ctx.directory);
 
     if ctx.debug_mode {
-        println!("Command: {:?}", command);
+        println!("Full command: {:?}", command);
     }
 
-    // Ensure we're in normal terminal mode before executing command
+    // Disable raw mode only in interactive mode
     if !ctx.test_mode {
-        terminal::disable_raw_mode()?;
+        let _ = terminal::disable_raw_mode();
         // Reset cursor position
         let mut stdout = io::stdout();
-        crossterm::execute!(
+        let _ = crossterm::execute!(
             stdout,
             crossterm::cursor::MoveTo(0, crossterm::cursor::position()?.1)
-        )?;
+        );
         println!(); // Add a newline before command output
     }
 
+    // Execute the command and capture output
     let output = command.output()?;
 
+    // Handle command output
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!(
             "Command failed with status: {}. stderr: {}",
             output.status,
-            String::from_utf8_lossy(&output.stderr)
+            stderr
         ));
     }
 
-    // Process output line by line
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    let lines: Vec<&str> = stdout_str.split('\n').collect();
-    
-    // Print each line, forcing cursor to start of line each time
-    let mut stdout = io::stdout();
-    for line in lines.iter().filter(|l| !l.is_empty()) {
-        if !ctx.test_mode {
-            crossterm::execute!(
-                stdout,
-                crossterm::cursor::MoveToColumn(0),
-                crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
-            )?;
-            write!(stdout, "{}\n", line.trim())?;
-            stdout.flush()?;
-        } else {
-            println!("{}", line.trim());
-        }
+    // Print stdout
+    if !output.stdout.is_empty() {
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        print!("{}", stdout_str);
     }
 
-    // Handle stderr similarly
-    let stderr_str = String::from_utf8_lossy(&output.stderr);
-    let err_lines: Vec<&str> = stderr_str.split('\n').collect();
-    
-    let mut stderr = io::stderr();
-    for line in err_lines.iter().filter(|l| !l.is_empty()) {
-        if !ctx.test_mode {
-            crossterm::execute!(
-                stderr,
-                crossterm::cursor::MoveToColumn(0),
-                crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
-            )?;
-            write!(stderr, "{}\n", line.trim())?;
-            stderr.flush()?;
-        } else {
-            eprintln!("{}", line.trim());
-        }
-    }
-
-    if ctx.debug_mode {
-        if !ctx.test_mode {
-            println!("Arguments: CommandArgs {{ inner: {:?} }}", 
-                    if ctx.test_mode { vec!["-c", &wrapped_command] } 
-                    else { vec!["-i", "-l", "-c", &wrapped_command] });
-        }
+    // Print stderr
+    if !output.stderr.is_empty() {
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        eprint!("{}", stderr_str);
     }
 
     Ok(())
