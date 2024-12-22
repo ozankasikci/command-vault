@@ -19,8 +19,12 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
     } else {
         // Detect the current shell and source appropriate config
         let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
-        // Remove any surrounding quotes from the command
-        let clean_command = command.trim_matches('"').to_string();
+        // Remove any surrounding quotes from the command and replace && with && echo -e '\n'
+        let clean_command = command
+            .trim_matches('"')
+            .replace(" && ", " && echo -e '\\n' && ")
+            .to_string();
+            
         match shell_type.as_str() {
             "zsh" => format!(
                 r#"if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null || true; fi; {}"#,
@@ -71,6 +75,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
             stdout,
             crossterm::cursor::MoveTo(0, crossterm::cursor::position()?.1)
         )?;
+        println!(); // Add a newline before command output
     }
 
     let output = command.output()?;
@@ -83,8 +88,36 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         ));
     }
 
-    io::stdout().write_all(&output.stdout)?;
-    io::stderr().write_all(&output.stderr)?;
+    // Process output line by line
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout_str.split('\n').collect();
+    
+    // Print each line, forcing cursor to start of line each time
+    let mut stdout = io::stdout();
+    for line in lines.iter().filter(|l| !l.is_empty()) {
+        crossterm::execute!(
+            stdout,
+            crossterm::cursor::MoveToColumn(0),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+        )?;
+        write!(stdout, "{}\n", line.trim())?;
+        stdout.flush()?;
+    }
+
+    // Handle stderr similarly
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
+    let err_lines: Vec<&str> = stderr_str.split('\n').collect();
+    
+    let mut stderr = io::stderr();
+    for line in err_lines.iter().filter(|l| !l.is_empty()) {
+        crossterm::execute!(
+            stderr,
+            crossterm::cursor::MoveToColumn(0),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+        )?;
+        write!(stderr, "{}\n", line.trim())?;
+        stderr.flush()?;
+    }
 
     if ctx.debug_mode {
         if !ctx.test_mode {
