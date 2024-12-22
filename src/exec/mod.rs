@@ -95,13 +95,17 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     // Print each line, forcing cursor to start of line each time
     let mut stdout = io::stdout();
     for line in lines.iter().filter(|l| !l.is_empty()) {
-        crossterm::execute!(
-            stdout,
-            crossterm::cursor::MoveToColumn(0),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
-        )?;
-        write!(stdout, "{}\n", line.trim())?;
-        stdout.flush()?;
+        if !ctx.test_mode {
+            crossterm::execute!(
+                stdout,
+                crossterm::cursor::MoveToColumn(0),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+            )?;
+            write!(stdout, "{}\n", line.trim())?;
+            stdout.flush()?;
+        } else {
+            println!("{}", line.trim());
+        }
     }
 
     // Handle stderr similarly
@@ -110,13 +114,17 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     
     let mut stderr = io::stderr();
     for line in err_lines.iter().filter(|l| !l.is_empty()) {
-        crossterm::execute!(
-            stderr,
-            crossterm::cursor::MoveToColumn(0),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
-        )?;
-        write!(stderr, "{}\n", line.trim())?;
-        stderr.flush()?;
+        if !ctx.test_mode {
+            crossterm::execute!(
+                stderr,
+                crossterm::cursor::MoveToColumn(0),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+            )?;
+            write!(stderr, "{}\n", line.trim())?;
+            stderr.flush()?;
+        } else {
+            eprintln!("{}", line.trim());
+        }
     }
 
     if ctx.debug_mode {
