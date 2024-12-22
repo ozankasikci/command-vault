@@ -37,13 +37,25 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
         fs::create_dir_all(&temp_path).unwrap();
+        // Ensure the directory exists and is accessible
+        assert!(temp_path.exists());
+        assert!(temp_path.is_dir());
         (temp_dir, temp_path)
+    }
+
+    fn setup_test_dir(temp_path: &PathBuf) -> Result<(), std::io::Error> {
+        // Create a test file
+        let test_file = temp_path.join("test.txt");
+        fs::write(&test_file, "test content")?;
+        // Verify the file was created
+        assert!(test_file.exists());
+        Ok(())
     }
 
     #[test]
     fn test_basic_command_execution() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
         let mut command = create_test_command("echo 'hello world'");
         command.directory = dir_path;
@@ -59,13 +71,11 @@ mod tests {
     #[test]
     fn test_command_with_working_directory() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
-        // Create a test file in the directory
-        let test_file = temp_path.join("test.txt");
-        fs::write(&test_file, "test content").unwrap();
+        setup_test_dir(&temp_path).unwrap();
         
-        let mut command = create_test_command("ls");
+        let mut command = create_test_command("ls test.txt");
         command.directory = dir_path;
         
         setup_test_env();
@@ -79,7 +89,7 @@ mod tests {
     #[test]
     fn test_command_with_parameters() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
         let mut command = create_test_command("echo '@message'");
         command.directory = dir_path;
@@ -101,9 +111,9 @@ mod tests {
     #[test]
     fn test_command_with_quoted_parameters() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
-        let mut command = create_test_command("echo '@message'");
+        let mut command = create_test_command("printf '%s\\n' '@message'");
         command.directory = dir_path;
         command.parameters = vec![
             Parameter::with_description(
@@ -123,9 +133,9 @@ mod tests {
     #[test]
     fn test_command_with_multiple_env_vars() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
-        let mut command = create_test_command("echo \"$TEST_VAR1 $TEST_VAR2\"");
+        let mut command = create_test_command("printf '%s %s\\n' \"$TEST_VAR1\" \"$TEST_VAR2\"");
         command.directory = dir_path;
         
         setup_test_env();
@@ -145,7 +155,7 @@ mod tests {
     #[test]
     fn test_command_with_directory_traversal() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
         // Create a test directory structure
         let test_dir = temp_path.join("test_dir");
@@ -157,7 +167,7 @@ mod tests {
         
         // Attempt to traverse outside the test directory
         let mut command = create_test_command("cat ../test.txt");
-        command.directory = test_dir.to_string_lossy().to_string();
+        command.directory = test_dir.canonicalize().unwrap().to_string_lossy().to_string();
         
         setup_test_env();
         let result = execute_command(&command);
@@ -170,9 +180,12 @@ mod tests {
     #[test]
     fn test_command_with_special_shell_chars() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
         
-        let mut command = create_test_command("echo test > test.txt && cat test.txt");
+        // Create a test file first
+        setup_test_dir(&temp_path).unwrap();
+        
+        let mut command = create_test_command("printf 'test' > output.txt && cat output.txt");
         command.directory = dir_path;
         
         setup_test_env();
