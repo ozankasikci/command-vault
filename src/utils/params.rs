@@ -58,10 +58,13 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
             };
 
             // Quote value if it contains spaces, special characters, or if it's part of a grep command
-            let needs_quotes = value.is_empty() || 
-                              value.contains(' ') || 
-                              value.contains('*') || 
-                              final_command.starts_with("grep");
+            // For git commit messages, we don't want to add quotes
+            let needs_quotes = !command.contains("git commit") && (
+                value.is_empty() || 
+                value.contains(' ') || 
+                value.contains('*') || 
+                final_command.starts_with("grep")
+            );
 
             let quoted_value = if needs_quotes {
                 format!("'{}'", value.replace('\'', "'\\''"))
