@@ -5,7 +5,7 @@ use std::io::Write;
 use colored::*;
 use crossterm::{
     cursor::MoveTo,
-    terminal::{Clear, ClearType, disable_raw_mode},
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
     event::{self, Event, KeyCode, KeyModifiers},
     ExecutableCommand, QueueableCommand,
     style::Print,
@@ -86,9 +86,15 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
         }
         return Ok(final_command);
     }
-    
+
+    // Interactive mode for non-test environment
     let mut stdout = std::io::stdout();
     let mut param_values: HashMap<String, String> = HashMap::new();
+    
+    // Only enable raw mode if not in test mode
+    if !is_test {
+        enable_raw_mode()?;
+    }
     
     let result = (|| -> Result<String> {
         for param in parameters {
@@ -97,66 +103,72 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
             let mut cursor_pos = 0;
 
             loop {
-                // Clear screen
-                stdout.queue(Clear(ClearType::All))?;
+                // Only perform terminal operations if not in test mode
+                if !is_test {
+                    // Clear screen
+                    stdout.queue(Clear(ClearType::All))?;
 
-                // Header
-                stdout.queue(MoveTo(0, HEADER_LINE))?
-                      .queue(Print("Enter values for command parameters:"))?;
+                    // Header
+                    stdout.queue(MoveTo(0, HEADER_LINE))?
+                          .queue(Print("Enter values for command parameters:"))?;
 
-                // Top separator
-                stdout.queue(MoveTo(0, SEPARATOR_LINE))?
-                      .queue(Print("─".repeat(45).dimmed()))?;
+                    // Top separator
+                    stdout.queue(MoveTo(0, SEPARATOR_LINE))?
+                          .queue(Print("─".repeat(45).dimmed()))?;
 
-                // Parameter info
-                stdout.queue(MoveTo(0, PARAM_LINE))?
-                      .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
-                if !desc.is_empty() {
-                    stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
+                    // Parameter info
+                    stdout.queue(MoveTo(0, PARAM_LINE))?
+                          .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
+                    if !desc.is_empty() {
+                        stdout.queue(Print(format!(" - {}", desc.dimmed())))?;
+                    }
+
+                    // Input field
+                    stdout.queue(MoveTo(0, INPUT_LINE))?
+                          .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
+
+                    // Preview section
+                    let mut preview_command = command.to_string();
+                    for (param_name, value) in &param_values {
+                        preview_command = preview_command.replace(&format!("@{}", param_name), value);
+                    }
+                    if !input.is_empty() {
+                        preview_command = preview_command.replace(&format!("@{}", param.name), &input);
+                    }
+
+                    // Bottom separator
+                    stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
+                          .queue(Print("─".repeat(45).dimmed()))?;
+
+                    // Command preview section with softer colors
+                    stdout.queue(MoveTo(0, COMMAND_LINE))?
+                          .queue(Print(format!("{}: {}", 
+                              "Command to execute".blue().bold(), 
+                              preview_command.green()
+                          )))?;
+
+                    // Working directory with softer colors
+                    stdout.queue(MoveTo(0, WORKDIR_LINE))?
+                          .queue(Print(format!("{}: {}", 
+                              "Working directory".cyan().bold(), 
+                              std::env::current_dir()?.to_string_lossy().white()
+                          )))?;
+                    
+                    // Position cursor at input
+                    let input_prompt = "Enter value: ";
+                    stdout.queue(MoveTo(
+                        (input_prompt.len() + cursor_pos) as u16,
+                        INPUT_LINE
+                    ))?;
+                    
+                    stdout.flush()?;
                 }
-
-                // Input field
-                stdout.queue(MoveTo(0, INPUT_LINE))?
-                      .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
-
-                // Preview section
-                let mut preview_command = command.to_string();
-                for (param_name, value) in &param_values {
-                    preview_command = preview_command.replace(&format!("@{}", param_name), value);
-                }
-                if !input.is_empty() {
-                    preview_command = preview_command.replace(&format!("@{}", param.name), &input);
-                }
-
-                // Bottom separator
-                stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
-                      .queue(Print("─".repeat(45).dimmed()))?;
-
-                // Command preview section with softer colors
-                stdout.queue(MoveTo(0, COMMAND_LINE))?
-                      .queue(Print(format!("{}: {}", 
-                          "Command to execute".blue().bold(), 
-                          preview_command.green()
-                      )))?;
-
-                // Working directory with softer colors
-                stdout.queue(MoveTo(0, WORKDIR_LINE))?
-                      .queue(Print(format!("{}: {}", 
-                          "Working directory".cyan().bold(), 
-                          std::env::current_dir()?.to_string_lossy().white()
-                      )))?;
-                
-                // Position cursor at input
-                let input_prompt = "Enter value: ";
-                stdout.queue(MoveTo(
-                    (input_prompt.len() + cursor_pos) as u16,
-                    INPUT_LINE
-                ))?;
-                
-                stdout.flush()?;
 
                 // Handle input
-                if let Event::Key(key) = event::read()? {
+                if is_test {
+                    // In test mode, use empty input
+                    break;
+                } else if let Event::Key(key) = event::read()? {
                     match (key.code, key.modifiers) {
                         (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                             return Err(anyhow!("Operation cancelled by user"));
@@ -185,7 +197,12 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                 }
             }
 
-            let value = input;
+            let value = if is_test {
+                param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
+            } else {
+                input
+            };
+
             let needs_quotes = value.is_empty() || 
                               value.contains(' ') || 
                               value.contains('*') || 
@@ -207,23 +224,10 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
         Ok(final_command)
     })();
 
-    // Always cleanup terminal state, regardless of success or error
-    disable_raw_mode()?;
-    stdout.execute(Clear(ClearType::All))?
-          .execute(MoveTo(0, 0))?;
-
-    // Re-enable colored output
-    colored::control::set_override(true);
-    
-    // Now handle the result
-    match result {
-        Ok(cmd) => {
-            // Final display
-            println!("{}: {}", "Command to execute".blue().bold(), cmd.green());
-            println!("{}: {}", "Working directory".cyan().bold(), std::env::current_dir()?.to_string_lossy().white());
-            io::stdout().flush()?;
-            Ok(cmd)
-        }
-        Err(e) => Err(e)
+    // Only disable raw mode if we enabled it
+    if !is_test {
+        disable_raw_mode()?;
     }
+    
+    result
 }

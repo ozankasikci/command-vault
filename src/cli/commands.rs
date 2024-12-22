@@ -272,7 +272,7 @@ pub fn handle_command(command: Commands, db: &mut Database, debug: bool) -> Resu
             let ctx = ExecutionContext {
                 command: substitute_parameters(&command.command, &current_params, None)?,
                 directory: command.directory.clone(),
-                test_mode: false,
+                test_mode: std::env::var("COMMAND_VAULT_TEST").is_ok(),
                 debug_mode: debug,
             };
             execute_shell_command(&ctx)?;

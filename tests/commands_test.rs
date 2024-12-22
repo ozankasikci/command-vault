@@ -446,7 +446,7 @@ fn test_command_with_special_chars() -> Result<()> {
 fn test_handle_command_debug() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     
-    // First add the command
+    // First add a simple command that works in any shell
     let add_command = Commands::Add {
         command: vec!["echo".to_string(), "test".to_string()],
         tags: vec![],

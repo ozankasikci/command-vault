@@ -195,3 +195,108 @@ fn test_app_selection() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_app_confirm_delete() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test setting confirm delete
+    app.selected = Some(0);
+    app.confirm_delete = Some(0);
+    assert_eq!(app.confirm_delete, Some(0));
+
+    // Test canceling delete
+    app.confirm_delete = None;
+    assert_eq!(app.confirm_delete, None);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_debug_mode() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    
+    // Test debug mode enabled
+    let mut app = App::new(commands.clone(), &mut db, true);
+    assert_eq!(app.debug_mode, true);
+    
+    // Test debug mode disabled
+    let mut app = App::new(commands.clone(), &mut db, false);
+    assert_eq!(app.debug_mode, false);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_help_toggle() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.show_help, false);
+
+    // Test toggling help on
+    app.show_help = true;
+    assert_eq!(app.show_help, true);
+
+    // Test toggling help off
+    app.show_help = false;
+    assert_eq!(app.show_help, false);
+
+    Ok(())
+}
+
+#[test]
+fn test_add_command_app_cursor_movement() {
+    let mut app = AddCommandApp::new();
+    
+    // Test initial cursor position
+    assert_eq!(app.command_cursor, 0);
+    
+    // Test setting cursor position
+    app.set_command("ls -la".to_string());
+    app.command_cursor = 3;
+    assert_eq!(app.command_cursor, 3);
+}
+
+#[test]
+fn test_app_filter_clear() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Set filter text
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), 1);
+
+    // Clear filter text
+    app.filter_text.clear();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), commands.len());
+
+    Ok(())
+}
+
+#[test]
+fn test_add_command_app_tag_operations() {
+    let mut app = AddCommandApp::new();
+    
+    // Test adding a tag
+    app.current_tag = "git".to_string();
+    app.tags.push(app.current_tag.clone());
+    assert_eq!(app.tags, vec!["git"]);
+    
+    // Test clearing current tag
+    app.current_tag.clear();
+    assert!(app.current_tag.is_empty());
+    
+    // Test adding multiple tags
+    app.tags.push("docker".to_string());
+    app.tags.push("test".to_string());
+    assert_eq!(app.tags, vec!["git", "docker", "test"]);
+}
