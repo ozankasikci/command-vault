@@ -122,21 +122,29 @@ mod tests {
         let (temp_dir, temp_path) = get_safe_temp_dir()?;
         let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
-        let mut command = create_test_command("echo '@message'");
-        command.directory = dir_path;
+        // Create a simple command that just echoes the parameter
+        let mut command = create_test_command("echo @message");
+        command.directory = dir_path.clone();
         command.parameters = vec![
-            Parameter::with_description(
-                "message".to_string(),
-                Some("Test message".to_string())
-            ),
+            Parameter {
+                name: "message".to_string(),
+                description: Some("Test message".to_string()),
+            },
         ];
 
+        // Set up test environment with a known test value
         setup_test_env();
-        let result = execute_command(&command);
-        cleanup_test_env();
+        env::set_var("COMMAND_VAULT_TEST_INPUT", "test_message");
         
-        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        // Execute the command
+        let result = execute_command(&command);
+        
+        // Clean up
+        cleanup_test_env();
         drop(temp_dir);
+        
+        // Verify the result
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
         Ok(())
     }
 
