@@ -5,6 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use chrono::Utc;
+use std::thread;
+use std::time::Duration;
 
 #[cfg(test)]
 mod tests {
@@ -33,29 +35,56 @@ mod tests {
         env::remove_var("SHELL");
     }
 
-    fn get_safe_temp_dir() -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().to_path_buf();
-        fs::create_dir_all(&temp_path).unwrap();
-        // Ensure the directory exists and is accessible
-        assert!(temp_path.exists());
-        assert!(temp_path.is_dir());
-        (temp_dir, temp_path)
+    fn ensure_directory_exists(path: &PathBuf) -> std::io::Result<()> {
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+        }
+        // Small delay to ensure filesystem operations complete
+        thread::sleep(Duration::from_millis(100));
+        Ok(())
     }
 
-    fn setup_test_dir(temp_path: &PathBuf) -> Result<(), std::io::Error> {
+    fn get_safe_temp_dir() -> std::io::Result<(TempDir, PathBuf)> {
+        let temp_dir = TempDir::new()?;
+        let temp_path = temp_dir.path().to_path_buf();
+        ensure_directory_exists(&temp_path)?;
+        
+        // Verify the directory exists and is accessible
+        if !temp_path.exists() || !temp_path.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to create temporary directory"
+            ));
+        }
+        
+        Ok((temp_dir, temp_path))
+    }
+
+    fn setup_test_dir(temp_path: &PathBuf) -> std::io::Result<()> {
+        ensure_directory_exists(temp_path)?;
+        
         // Create a test file
         let test_file = temp_path.join("test.txt");
         fs::write(&test_file, "test content")?;
+        
+        // Small delay to ensure file is written
+        thread::sleep(Duration::from_millis(100));
+        
         // Verify the file was created
-        assert!(test_file.exists());
+        if !test_file.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to create test file"
+            ));
+        }
+        
         Ok(())
     }
 
     #[test]
-    fn test_basic_command_execution() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_basic_command_execution() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
         let mut command = create_test_command("echo 'hello world'");
         command.directory = dir_path;
@@ -66,16 +95,17 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_working_directory() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_working_directory() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
-        setup_test_dir(&temp_path).unwrap();
+        setup_test_dir(&temp_path)?;
         
-        let mut command = create_test_command("ls test.txt");
+        let mut command = create_test_command("cat test.txt");
         command.directory = dir_path;
         
         setup_test_env();
@@ -84,12 +114,13 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_parameters() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_parameters() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
         let mut command = create_test_command("echo '@message'");
         command.directory = dir_path;
@@ -106,14 +137,15 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_quoted_parameters() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_quoted_parameters() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
-        let mut command = create_test_command("printf '%s\\n' '@message'");
+        let mut command = create_test_command("echo '@message'");
         command.directory = dir_path;
         command.parameters = vec![
             Parameter::with_description(
@@ -128,14 +160,15 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_multiple_env_vars() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_multiple_env_vars() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
-        let mut command = create_test_command("printf '%s %s\\n' \"$TEST_VAR1\" \"$TEST_VAR2\"");
+        let mut command = create_test_command("echo \"$TEST_VAR1 $TEST_VAR2\"");
         command.directory = dir_path;
         
         setup_test_env();
@@ -150,24 +183,28 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_directory_traversal() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_directory_traversal() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
         // Create a test directory structure
         let test_dir = temp_path.join("test_dir");
-        fs::create_dir_all(&test_dir).unwrap();
+        ensure_directory_exists(&test_dir)?;
         
         // Create a test file in the test directory
         let test_file = test_dir.join("test.txt");
-        fs::write(&test_file, "test content").unwrap();
+        fs::write(&test_file, "test content")?;
+        
+        // Small delay to ensure file is written
+        thread::sleep(Duration::from_millis(100));
         
         // Attempt to traverse outside the test directory
         let mut command = create_test_command("cat ../test.txt");
-        command.directory = test_dir.canonicalize().unwrap().to_string_lossy().to_string();
+        command.directory = test_dir.canonicalize()?.to_string_lossy().to_string();
         
         setup_test_env();
         let result = execute_command(&command);
@@ -175,17 +212,18 @@ mod tests {
         
         assert!(result.is_err(), "Directory traversal should be prevented");
         drop(temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_command_with_special_shell_chars() {
-        let (temp_dir, temp_path) = get_safe_temp_dir();
-        let dir_path = temp_path.canonicalize().unwrap().to_string_lossy().to_string();
+    fn test_command_with_special_shell_chars() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
         
         // Create a test file first
-        setup_test_dir(&temp_path).unwrap();
+        setup_test_dir(&temp_path)?;
         
-        let mut command = create_test_command("printf 'test' > output.txt && cat output.txt");
+        let mut command = create_test_command("echo test > output.txt && cat output.txt");
         command.directory = dir_path;
         
         setup_test_env();
@@ -194,5 +232,6 @@ mod tests {
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
+        Ok(())
     }
 }
