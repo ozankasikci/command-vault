@@ -20,7 +20,10 @@ mod tests {
     #[test]
     fn test_basic_command_execution() {
         let command = create_test_command("echo 'hello world'");
-        assert!(execute_command(&command).is_ok());
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
     }
 
     #[test]
@@ -65,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_command_with_quoted_parameters() {
-        let mut command = create_test_command("echo @message");
+        let mut command = create_test_command("echo '@message'");
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -74,8 +77,9 @@ mod tests {
         ];
 
         env::set_var("COMMAND_VAULT_TEST", "1");
-        assert!(execute_command(&command).is_ok());
+        let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
     }
 
     #[test]
