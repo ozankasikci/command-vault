@@ -324,7 +324,6 @@ impl<'a> App<'a> {
                 "  - Parameters (@param) allow dynamic input",
                 "  - Filter works on commands, tags, and directories",
                 "  - Working directory affects command execution",
-                "  - Commands are stored with timestamps for reference",
                 "",
                 "Note:",
                 "  - Debug mode can be enabled for troubleshooting",
