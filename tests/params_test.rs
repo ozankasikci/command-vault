@@ -313,3 +313,158 @@ fn test_substitute_parameters_empty_value_removed_duplicate() -> Result<(), Box<
     std::env::remove_var("COMMAND_VAULT_TEST");
     Ok(())
 }
+
+#[test]
+fn test_parse_parameters_with_adjacent_parameters() {
+    let command = "echo @first@second";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].name, "first");
+    assert_eq!(params[1].name, "second");
+}
+
+#[test]
+fn test_parse_parameters_with_special_chars_in_description() {
+    let command = "echo @name:special!";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name, "name");
+    assert_eq!(params[0].description, Some("special!".to_string()));
+}
+
+#[test]
+fn test_substitute_parameters_with_semicolon() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @cmd";
+    let parameters = vec![Parameter {
+        name: "cmd".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("echo hello; ls"))?;
+    assert_eq!(result, "echo 'echo hello; ls'");
+
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_pipe() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @cmd";
+    let parameters = vec![Parameter {
+        name: "cmd".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("ls | grep test"))?;
+    assert_eq!(result, "echo 'ls | grep test'");
+
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_redirection() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @cmd";
+    let parameters = vec![Parameter {
+        name: "cmd".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("echo test > file.txt"))?;
+    assert_eq!(result, "echo 'echo test > file.txt'");
+
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_existing_quotes() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @message";
+    let parameters = vec![Parameter {
+        name: "message".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("'already quoted'"))?;
+    assert_eq!(result, "echo 'already quoted'");
+
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_escaped_quotes() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    let command = "echo @message";
+    let parameters = vec![Parameter {
+        name: "message".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("It's a test"))?;
+    assert_eq!(result, "echo 'It'\\''s a test'");
+
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_parameter_new() {
+    let param = Parameter::new("test".to_string());
+    assert_eq!(param.name, "test");
+    assert_eq!(param.description, None);
+}
+
+#[test]
+fn test_parameter_with_description() {
+    let param = Parameter::with_description("test".to_string(), Some("A test parameter".to_string()));
+    assert_eq!(param.name, "test");
+    assert_eq!(param.description, Some("A test parameter".to_string()));
+}
+
+#[test]
+fn test_parse_parameters_with_trailing_whitespace() {
+    let command = "echo @name:test";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name, "name");
+    assert_eq!(params[0].description, Some("test".to_string()));
+}
+
+#[test]
+fn test_parse_parameters_with_multiple_colons() {
+    let command = "echo @name:test:value";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name, "name");
+    assert_eq!(params[0].description, Some("test:value".to_string()));
+}
+
+#[test]
+fn test_parse_parameters_with_numbers_in_description() {
+    let command = "echo @port:8080 @host:localhost:8080";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].name, "port");
+    assert_eq!(params[0].description, Some("8080".to_string()));
+    assert_eq!(params[1].name, "host");
+    assert_eq!(params[1].description, Some("localhost:8080".to_string()));
+}
+
+#[test]
+fn test_parse_parameters_with_dash_in_description() {
+    let command = "git checkout @branch:feature-123";
+    let params = parse_parameters(command);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name, "branch");
+    assert_eq!(params[0].description, Some("feature-123".to_string()));
+}

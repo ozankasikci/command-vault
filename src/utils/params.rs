@@ -16,12 +16,20 @@ use std::{
 use crate::db::models::Parameter;
 
 pub fn parse_parameters(command: &str) -> Vec<Parameter> {
-    let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s]+))?").unwrap();
+    let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s][^@]*))?").unwrap();
     let mut parameters = Vec::new();
+    let mut last_end = 0;
     
     for cap in re.captures_iter(command) {
         let name = cap[1].to_string();
-        let description = cap.get(2).map(|m| m.as_str().to_string());
+        let description = cap.get(2).map(|m| {
+            let desc = m.as_str().trim_end();
+            if let Some(space_pos) = desc.find(char::is_whitespace) {
+                &desc[..space_pos]
+            } else {
+                desc
+            }.to_string()
+        });
         parameters.push(Parameter::with_description(name, description));
     }
     
