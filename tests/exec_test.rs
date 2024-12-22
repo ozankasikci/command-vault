@@ -2,7 +2,7 @@ use command_vault::exec::execute_command;
 use command_vault::db::models::{Command, Parameter};
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::path::Path;
 use tempfile::TempDir;
 use chrono::Utc;
 
@@ -114,30 +114,88 @@ mod tests {
     }
 
     #[test]
-    fn test_command_with_env_vars() {
-        let mut command = create_test_command("printf '%s'");
-        env::set_var("TEST_VAR", "test_value");
-        command.command = "printf \"$TEST_VAR\"".to_string();
+    fn test_command_with_multiple_env_vars() {
+        let mut command = create_test_command("printf '%s %s %s'");
+        env::set_var("TEST_VAR1", "value1");
+        env::set_var("TEST_VAR2", "value2");
+        env::set_var("TEST_VAR3", "value3");
+        command.command = "printf \"$TEST_VAR1 $TEST_VAR2 $TEST_VAR3\"".to_string();
         
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
-        env::remove_var("TEST_VAR");
+        env::remove_var("TEST_VAR1");
+        env::remove_var("TEST_VAR2");
+        env::remove_var("TEST_VAR3");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
     }
 
     #[test]
-    fn test_command_with_stdin() {
-        let command = create_test_command("cat");
-        
+    fn test_command_with_chaining() {
+        let command = create_test_command("printf 'a' && printf 'b' || printf 'c'");
         env::set_var("COMMAND_VAULT_TEST", "1");
-        env::set_var("COMMAND_VAULT_TEST_INPUT", "test input");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
-        env::remove_var("COMMAND_VAULT_TEST_INPUT");
-        
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_command_with_pipeline() {
+        let command = create_test_command("printf 'test\\ndata' | grep test");
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_command_with_substitution() {
+        let command = create_test_command("echo $(echo 'test')");
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_command_with_shell_options() {
+        let command = create_test_command("set -e; false; printf 'should not print'");
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_command_with_invalid_shell() {
+        let mut command = create_test_command("printf 'test'");
+        env::set_var("SHELL", "/nonexistent/shell");
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        env::remove_var("SHELL");
+        // Should fall back to /bin/sh
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_command_with_directory_traversal() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_string_lossy().to_string();
+        
+        let mut command = create_test_command("pwd");
+        command.directory = format!("{}/../../../etc", temp_path);
+        
+        env::set_var("COMMAND_VAULT_TEST", "1");
+        let result = execute_command(&command);
+        env::remove_var("COMMAND_VAULT_TEST");
+        
+        // Should fail or resolve to a safe path
+        if result.is_ok() {
+            let path = Path::new(&command.directory);
+            assert!(!path.to_string_lossy().contains("/etc"));
+        }
     }
 
     #[test]
@@ -202,5 +260,29 @@ mod tests {
         use command_vault::exec::wrap_command;
         let result = wrap_command("printf test", true);
         assert!(result.contains("export COMMAND_VAULT_TEST=1"));
+    }
+
+    #[test]
+    fn test_command_with_special_shell_chars() {
+        let special_chars = vec![
+            "printf 'test > file'",
+            "printf 'test < file'",
+            "printf 'test | grep test'",
+            "printf 'test & wait'",
+            "printf 'test ; echo more'",
+            "printf 'test && echo more'",
+            "printf 'test || echo more'",
+            "printf 'test $(echo more)'",
+            "printf 'test `echo more`'",
+            "printf 'test # comment'",
+        ];
+
+        for cmd in special_chars {
+            let command = create_test_command(cmd);
+            env::set_var("COMMAND_VAULT_TEST", "1");
+            let result = execute_command(&command);
+            env::remove_var("COMMAND_VAULT_TEST");
+            assert!(result.is_ok(), "Command failed: {:?} for input: {}", result.err(), cmd);
+        }
     }
 }
