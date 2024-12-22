@@ -105,7 +105,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         }
         Ok(())
     } else {
-        // In normal mode, use interactive shell
+        // In normal mode, use interactive login shell
         let mut command = std::process::Command::new(&shell);
         
         // Special handling for git log format strings
@@ -118,6 +118,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         };
 
         command
+            .arg("-l")  // Use login shell
             .args(&["-c", &escaped_cmd])
             .current_dir(&ctx.directory)
             .env("SHELL", &shell)
