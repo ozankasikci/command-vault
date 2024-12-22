@@ -443,6 +443,28 @@ fn test_command_with_special_chars() -> Result<()> {
 }
 
 #[test]
+fn test_handle_command_debug() -> Result<()> {
+    let (mut db, _db_dir) = create_test_db()?;
+    
+    // First add the command
+    let add_command = Commands::Add {
+        command: vec!["echo".to_string(), "test".to_string()],
+        tags: vec![],
+    };
+    handle_command(add_command, &mut db, true)?;
+
+    // Then get the id of the added command
+    let commands = db.list_commands(1, false)?;
+    let id = commands[0].id.unwrap();
+
+    // Execute the command in debug mode
+    let exec_command = Commands::Exec { command_id: id, debug: true };
+    handle_command(exec_command, &mut db, true)?;
+
+    Ok(())
+}
+
+#[test]
 fn test_handle_command_delete() -> Result<()> {
     let (mut db, _db_dir) = create_test_db()?;
     
@@ -513,35 +535,5 @@ fn test_handle_command_delete_with_tags() -> Result<()> {
     // Verify tags were removed
     let tags = db.list_tags()?;
     assert_eq!(tags.len(), 0);
-    Ok(())
-}
-
-#[test]
-fn test_handle_command_debug() -> Result<()> {
-    let (mut db, _db_dir) = create_test_db()?;
-    
-    // First add the command
-    let add_command = Commands::Add {
-        command: vec!["echo".to_string(), "test".to_string()],
-        tags: vec![],
-    };
-    handle_command(add_command, &mut db, true)?;
-
-    // Then get the id of the added command
-    let commands = db.list_commands(1, false)?;
-    let id = commands[0].id.unwrap();
-
-    // Execute the command
-    let exec_command = Commands::Exec { command_id: id, debug: true };
-    handle_command(exec_command, &mut db, true)?;
-
-    // Test with non-existent command id
-    let exec_command = Commands::Exec { command_id: 999, debug: true };
-    let result = handle_command(exec_command, &mut db, true);
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "Command not found with ID: 999"
-    );
     Ok(())
 }

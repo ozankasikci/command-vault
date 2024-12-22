@@ -47,9 +47,14 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
         for (index, param) in parameters.iter().enumerate() {
             let value = if let Some(test_mode) = test_input {
                 if test_values.len() > index {
-                    test_values[index].to_string()
+                    let value = test_values[index].to_string();
+                    if value.is_empty() && param.description.is_some() {
+                        param.description.as_ref().unwrap().clone()
+                    } else {
+                        value
+                    }
                 } else if test_mode.is_empty() {
-                    "".to_string()
+                    param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
                 } else {
                     "test_value".to_string()
                 }
@@ -61,9 +66,13 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
             let needs_quotes = value.is_empty() || 
                              value.contains(' ') || 
                              value.contains('*') || 
+                             value.contains(';') ||
+                             value.contains('|') ||
+                             value.contains('>') ||
+                             value.contains('<') ||
                              final_command.starts_with("grep");
 
-            let quoted_value = if needs_quotes {
+            let quoted_value = if needs_quotes && !value.starts_with('\'') && !value.starts_with('"') {
                 format!("'{}'", value.replace('\'', "'\\''"))
             } else {
                 value
@@ -181,7 +190,10 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                               value.contains(' ') || 
                               value.contains('*') || 
                               command.starts_with("grep") ||
-                              command.starts_with("echo");
+                              value.contains(';') ||
+                              value.contains('|') ||
+                              value.contains('>') ||
+                              value.contains('<');
 
             let quoted_value = if needs_quotes {
                 format!("'{}'", value.replace('\'', "'\\''"))
