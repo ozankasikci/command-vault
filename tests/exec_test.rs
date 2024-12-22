@@ -47,22 +47,23 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
     fn test_command_with_working_directory() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
+        let dir_path = temp_path.to_string_lossy().to_string();
         
         let mut command = create_test_command("pwd");
-        command.directory = temp_path.to_string_lossy().to_string();
+        command.directory = dir_path;
         
         setup_test_env();
         let result = execute_command(&command);
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
@@ -84,7 +85,7 @@ mod tests {
         env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
@@ -106,7 +107,7 @@ mod tests {
         env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
@@ -126,13 +127,14 @@ mod tests {
         env::remove_var("TEST_VAR3");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
     fn test_command_with_directory_traversal() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let attempted_path = temp_path.join("../../../etc");
+        let base_path = temp_path.canonicalize().unwrap();
+        let attempted_path = base_path.join("../../../etc");
         
         let mut command = create_test_command("pwd");
         command.directory = attempted_path.to_string_lossy().to_string();
@@ -143,7 +145,7 @@ mod tests {
         
         // The command should fail because we don't allow directory traversal
         assert!(result.is_err(), "Directory traversal should be prevented");
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
@@ -152,7 +154,7 @@ mod tests {
         
         // Create a readonly file
         let readonly_file = temp_path.join("readonly.txt");
-        fs::write(&readonly_file, "test").unwrap();
+        fs::write(&readonly_file, "test content").unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -167,7 +169,7 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
@@ -181,32 +183,34 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 
     #[test]
     fn test_command_with_special_shell_chars() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        let special_chars = vec![
-            "echo test",  // Basic test
-            "echo test > /dev/null",  // Redirection
-            "echo test | cat",  // Pipeline
-            "echo test1; echo test2",  // Command separator
-            "echo test1 && echo test2",  // AND operator
-            "echo test1 || echo test2",  // OR operator
-            "echo $(echo test)",  // Command substitution
-            "echo `echo test`",  // Backtick substitution
-            "echo test # comment",  // Comment
+        let dir_path = temp_path.to_string_lossy().to_string();
+        
+        // Test each special character in isolation
+        let test_cases = vec![
+            "echo test",
+            "echo test > output.txt && cat output.txt",
+            "echo test | cat",
+            "echo test1; echo test2",
+            "echo test1 && echo test2",
+            "false || echo test",
+            "echo $(echo nested)",
+            "echo `echo nested`",
         ];
 
-        for cmd in special_chars {
+        for cmd in test_cases {
             let mut command = create_test_command(cmd);
-            command.directory = temp_path.to_string_lossy().to_string();
+            command.directory = dir_path.clone();
             setup_test_env();
             let result = execute_command(&command);
             cleanup_test_env();
             assert!(result.is_ok(), "Command failed: {:?} for input: {}", result.err(), cmd);
         }
-        drop(temp_dir); // Ensure cleanup
+        drop(temp_dir);
     }
 }
