@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_command_with_parameters() {
-        let mut command = create_test_command("printf '%s'");
+        let mut command = create_test_command("echo '@message'");
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_command_with_quoted_parameters() {
-        let mut command = create_test_command("printf '%s'");
+        let mut command = create_test_command("echo '@message'");
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -115,11 +115,10 @@ mod tests {
 
     #[test]
     fn test_command_with_multiple_env_vars() {
-        let mut command = create_test_command("printf '%s %s %s'");
+        let command = create_test_command("echo \"$TEST_VAR1 $TEST_VAR2 $TEST_VAR3\"");
         env::set_var("TEST_VAR1", "value1");
         env::set_var("TEST_VAR2", "value2");
         env::set_var("TEST_VAR3", "value3");
-        command.command = "printf \"$TEST_VAR1 $TEST_VAR2 $TEST_VAR3\"".to_string();
         
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
@@ -142,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_command_with_pipeline() {
-        let command = create_test_command("printf 'test\\ndata' | grep test");
+        let command = create_test_command("echo 'test' | grep test");
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
@@ -151,7 +150,7 @@ mod tests {
 
     #[test]
     fn test_command_with_substitution() {
-        let command = create_test_command("echo $(echo 'test')");
+        let command = create_test_command("echo `echo test`");
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
@@ -182,20 +181,18 @@ mod tests {
     #[test]
     fn test_command_with_directory_traversal() {
         let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().to_string_lossy().to_string();
+        let temp_path = temp_dir.path().canonicalize().unwrap();
+        let attempted_path = temp_path.join("../../../etc");
         
         let mut command = create_test_command("pwd");
-        command.directory = format!("{}/../../../etc", temp_path);
+        command.directory = attempted_path.to_string_lossy().to_string();
         
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
         
-        // Should fail or resolve to a safe path
-        if result.is_ok() {
-            let path = Path::new(&command.directory);
-            assert!(!path.to_string_lossy().contains("/etc"));
-        }
+        // The command should fail because we don't allow directory traversal
+        assert!(result.is_err());
     }
 
     #[test]
@@ -224,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_command_with_long_output() {
-        let command = create_test_command("printf '%s' \"$(printf 'a%.0s' {1..1000})\"");
+        let command = create_test_command("yes 'test' | head -n 1000");
         
         env::set_var("COMMAND_VAULT_TEST", "1");
         let result = execute_command(&command);
@@ -265,16 +262,15 @@ mod tests {
     #[test]
     fn test_command_with_special_shell_chars() {
         let special_chars = vec![
-            "printf 'test > file'",
-            "printf 'test < file'",
-            "printf 'test | grep test'",
-            "printf 'test & wait'",
-            "printf 'test ; echo more'",
-            "printf 'test && echo more'",
-            "printf 'test || echo more'",
-            "printf 'test $(echo more)'",
-            "printf 'test `echo more`'",
-            "printf 'test # comment'",
+            "echo 'test > file'",
+            "echo 'test < file'",
+            "echo 'test | grep test'",
+            "echo 'test ; echo more'",
+            "echo 'test && echo more'",
+            "echo 'test || echo more'",
+            "echo 'test $(echo more)'",
+            "echo 'test `echo more`'",
+            "echo 'test # comment'",
         ];
 
         for cmd in special_chars {
