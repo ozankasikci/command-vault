@@ -5,6 +5,7 @@ use dialoguer::{Input, theme::ColorfulTheme};
 use crate::shell::hooks::detect_current_shell;
 use crossterm::terminal;
 use crate::db::models::Command;
+use std::path::{Path, PathBuf};
 
 pub struct ExecutionContext {
     pub command: String,
@@ -35,6 +36,33 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
     }
 }
 
+fn is_path_traversal_attempt(command: &str, working_dir: &Path) -> bool {
+    // Split command into parts
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    
+    // Check each part that could be a path
+    for part in parts {
+        // Skip if it's a command or option
+        if part.starts_with('-') || !part.contains('/') {
+            continue;
+        }
+        
+        // Try to canonicalize the path
+        let path = Path::new(part);
+        if path.is_absolute() {
+            return true;
+        }
+        
+        if let Ok(full_path) = working_dir.join(path).canonicalize() {
+            if !full_path.starts_with(working_dir) {
+                return true;
+            }
+        }
+    }
+    
+    false
+}
+
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     // Always use /bin/sh in test mode, otherwise use the user's shell
     let shell = if ctx.test_mode {
@@ -49,6 +77,12 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         println!("Running command: {}", shell);
         println!("Working directory: {}", ctx.directory);
         println!("Wrapped command: {}", wrapped_command);
+    }
+
+    // Check for directory traversal attempts
+    let working_dir = Path::new(&ctx.directory);
+    if is_path_traversal_attempt(&ctx.command, working_dir) {
+        return Err(anyhow::anyhow!("Directory traversal attempt detected"));
     }
 
     // Create command with the appropriate shell
