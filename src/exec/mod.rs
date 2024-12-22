@@ -11,10 +11,11 @@ pub struct ExecutionContext {
 }
 
 pub fn wrap_command(command: &str, test_mode: bool) -> String {
+    // In test mode, return as is since we handle command splitting separately
     if test_mode {
         command.to_string()
     } else {
-        // Don't try to source rc files, just return the command
+        // In normal mode, no additional wrapping needed as we use shell -c
         command.to_string()
     }
 }
@@ -99,17 +100,11 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         
         // Special handling for git log format strings
         let escaped_cmd = if wrapped_command.contains("--pretty=format:") {
-            // Keep the exact command as is, just wrap it in a function
-            format!(r#"
-                f() {{
-                    {}
-                }}
-                f
-            "#, 
-                wrapped_command
-            )
+            // For git log format strings, wrap in a function to preserve formatting
+            format!(r#"f() {{ {}; }}; f"#, wrapped_command.trim())
         } else {
-            wrapped_command.to_string()
+            // Remove any surrounding quotes that might have been added
+            wrapped_command.trim_matches('"').to_string()
         };
 
         command
