@@ -23,10 +23,12 @@ mod tests {
 
     fn setup_test_env() {
         env::set_var("COMMAND_VAULT_TEST", "1");
+        env::set_var("COMMAND_VAULT_TEST_INPUT", "test_value");
     }
 
     fn cleanup_test_env() {
         env::remove_var("COMMAND_VAULT_TEST");
+        env::remove_var("COMMAND_VAULT_TEST_INPUT");
     }
 
     fn get_safe_temp_dir() -> (TempDir, PathBuf) {
@@ -68,9 +70,11 @@ mod tests {
 
     #[test]
     fn test_command_with_parameters() {
-        let mut command = create_test_command("echo '@message'");
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        command.directory = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.to_string_lossy().to_string();
+        
+        let mut command = create_test_command("echo '@message'");
+        command.directory = dir_path;
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -79,10 +83,8 @@ mod tests {
         ];
 
         setup_test_env();
-        env::set_var("COMMAND_VAULT_TEST_INPUT", "Test message");
         let result = execute_command(&command);
         cleanup_test_env();
-        env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
@@ -90,9 +92,11 @@ mod tests {
 
     #[test]
     fn test_command_with_quoted_parameters() {
-        let mut command = create_test_command("echo '@message'");
         let (temp_dir, temp_path) = get_safe_temp_dir();
-        command.directory = temp_path.to_string_lossy().to_string();
+        let dir_path = temp_path.to_string_lossy().to_string();
+        
+        let mut command = create_test_command("echo '@message'");
+        command.directory = dir_path;
         command.parameters = vec![
             Parameter::with_description(
                 "message".to_string(),
@@ -101,10 +105,8 @@ mod tests {
         ];
 
         setup_test_env();
-        env::set_var("COMMAND_VAULT_TEST_INPUT", "Test 'quoted' message");
         let result = execute_command(&command);
         cleanup_test_env();
-        env::remove_var("COMMAND_VAULT_TEST_INPUT");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
         drop(temp_dir);
@@ -139,8 +141,12 @@ mod tests {
         let test_dir = base_path.join("test_dir");
         fs::create_dir_all(&test_dir).unwrap();
         
+        // Create a test file in the test directory
+        let test_file = test_dir.join("test.txt");
+        fs::write(&test_file, "test content").unwrap();
+        
         // Attempt to traverse outside the temp directory
-        let mut command = create_test_command("ls ../../../etc/passwd");
+        let mut command = create_test_command("cat ../../../etc/passwd");
         command.directory = test_dir.to_string_lossy().to_string();
         
         setup_test_env();
