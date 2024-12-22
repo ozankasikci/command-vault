@@ -7,11 +7,10 @@ use crossterm::{
     cursor::MoveTo,
     terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
     event::{self, Event, KeyCode, KeyModifiers},
-    ExecutableCommand, QueueableCommand,
+    QueueableCommand,
     style::Print,
 };
 use std::collections::HashMap;
-use std::io;
 
 const HEADER_LINE: u16 = 0;
 const SEPARATOR_LINE: u16 = 1;
@@ -98,7 +97,7 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
     
     let result = (|| -> Result<String> {
         let mut stdout = std::io::stdout();
-        let mut param_values = HashMap::new();
+        let mut param_values: HashMap<String, String> = HashMap::new();
         
         // Only show UI in non-test mode
         if !is_test {
@@ -129,6 +128,33 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                     // Input field
                     stdout.queue(MoveTo(0, INPUT_LINE))?
                           .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
+
+                    // Preview section
+                    let mut preview_command = command.to_string();
+                    for (param_name, value) in &param_values {
+                        preview_command = preview_command.replace(&format!("@{}", param_name), value);
+                    }
+                    if !input.is_empty() {
+                        preview_command = preview_command.replace(&format!("@{}", param.name), &input);
+                    }
+
+                    // Bottom separator
+                    stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
+                          .queue(Print("─".repeat(45).dimmed()))?;
+
+                    // Command preview section with softer colors
+                    stdout.queue(MoveTo(0, COMMAND_LINE))?
+                          .queue(Print(format!("{}: {}", 
+                              "Command to execute".blue().bold(), 
+                              preview_command.green()
+                          )))?;
+
+                    // Working directory with softer colors
+                    stdout.queue(MoveTo(0, WORKDIR_LINE))?
+                          .queue(Print(format!("{}: {}", 
+                              "Working directory".cyan().bold(), 
+                              std::env::current_dir()?.to_string_lossy().white()
+                          )))?;
 
                     // Position cursor at input
                     stdout.queue(MoveTo(
@@ -183,14 +209,24 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                 input
             };
 
-            param_values.insert(param.name.clone(), value.clone());
+            param_values.insert(param.name.clone(), value);
         }
 
-        // Restore terminal and reset cursor
+        // Show final command info
         if !is_test {
-            disable_raw_mode()?;
-            stdout.queue(Clear(ClearType::All))?;
-            stdout.queue(MoveTo(0, 0))?;  // Move cursor to top-left
+            stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
+                  .queue(Print("─".repeat(45).dimmed()))?;
+            stdout.queue(MoveTo(0, COMMAND_LINE))?
+                  .queue(Print(format!("{}: {}", 
+                      "Command to execute".blue().bold(), 
+                      command.green()
+                  )))?;
+            stdout.queue(MoveTo(0, WORKDIR_LINE))?
+                  .queue(Print(format!("{}: {}", 
+                      "Working directory".cyan().bold(), 
+                      std::env::current_dir()?.to_string_lossy().white()
+                  )))?;
+            stdout.queue(MoveTo(0, WORKDIR_LINE + 2))?;  // Add extra newline
             stdout.flush()?;
         }
 

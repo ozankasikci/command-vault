@@ -1,10 +1,10 @@
 use std::io::{self, Write};
+use std::process::Command as ProcessCommand;
 use anyhow::Result;
-use crate::db::models::Command;
 use dialoguer::{Input, theme::ColorfulTheme};
-use colored::*;
 use crate::shell::hooks::detect_current_shell;
 use crossterm::terminal;
+use crate::db::models::Command;
 
 pub struct ExecutionContext {
     pub command: String,
@@ -47,8 +47,7 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     }
 
     // In test mode, execute commands directly
-    use std::process::Command;
-    let mut command = Command::new(&shell);
+    let mut command = ProcessCommand::new(&shell);
     
     if ctx.test_mode {
         command.arg("-c");
