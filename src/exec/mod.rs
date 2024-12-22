@@ -118,7 +118,8 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         };
 
         command
-            .arg("-l")  // Use login shell
+            .arg("-i")  // Interactive shell
+            .arg("-l")  // Login shell
             .args(&["-c", &escaped_cmd])
             .current_dir(&ctx.directory)
             .env("SHELL", &shell)
