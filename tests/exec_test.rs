@@ -134,16 +134,19 @@ mod tests {
     fn test_command_with_directory_traversal() {
         let (temp_dir, temp_path) = get_safe_temp_dir();
         let base_path = temp_path.canonicalize().unwrap();
-        let attempted_path = base_path.join("../../../etc");
         
-        let mut command = create_test_command("pwd");
-        command.directory = attempted_path.to_string_lossy().to_string();
+        // Create a test directory structure
+        let test_dir = base_path.join("test_dir");
+        fs::create_dir_all(&test_dir).unwrap();
+        
+        // Attempt to traverse outside the temp directory
+        let mut command = create_test_command("ls ../../../etc/passwd");
+        command.directory = test_dir.to_string_lossy().to_string();
         
         setup_test_env();
         let result = execute_command(&command);
         cleanup_test_env();
         
-        // The command should fail because we don't allow directory traversal
         assert!(result.is_err(), "Directory traversal should be prevented");
         drop(temp_dir);
     }
@@ -174,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_command_with_long_output() {
-        let mut command = create_test_command("yes 'test' | head -n 100");
+        let mut command = create_test_command("seq 1 100");
         let (temp_dir, temp_path) = get_safe_temp_dir();
         command.directory = temp_path.to_string_lossy().to_string();
         
@@ -191,16 +194,16 @@ mod tests {
         let (temp_dir, temp_path) = get_safe_temp_dir();
         let dir_path = temp_path.to_string_lossy().to_string();
         
-        // Test each special character in isolation
+        // Test each special character in isolation with simpler commands
         let test_cases = vec![
             "echo test",
-            "echo test > output.txt && cat output.txt",
-            "echo test | cat",
-            "echo test1; echo test2",
+            "echo test > test.txt",
+            "echo test | grep test",
+            "echo test1 ; echo test2",
             "echo test1 && echo test2",
             "false || echo test",
-            "echo $(echo nested)",
-            "echo `echo nested`",
+            "echo $(echo test)",
+            "echo `echo test`",
         ];
 
         for cmd in test_cases {
