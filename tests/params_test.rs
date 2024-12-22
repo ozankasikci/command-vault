@@ -242,3 +242,119 @@ fn test_substitute_parameters_no_parameters() -> Result<(), Box<dyn std::error::
     std::env::remove_var("COMMAND_VAULT_TEST");
     Ok(())
 }
+
+#[test]
+fn test_substitute_parameters_with_git_commands() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    // Test git commit with message
+    let command = "git commit -m @message";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("test commit"))?;
+    assert_eq!(result, "git commit -m 'test commit'");
+    
+    // Test git commit with multiple parameters
+    let command = "git commit -m @message --author @author";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: None,
+        },
+        Parameter {
+            name: "author".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("test commit\nJohn Doe"))?;
+    assert_eq!(result, "git commit -m 'test commit' --author 'John Doe'");
+    
+    // Test git commit with special characters in message
+    let command = "git commit -m @message";
+    let params = vec![
+        Parameter {
+            name: "message".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("fix: update parser"))?;
+    assert_eq!(result, "git commit -m 'fix: update parser'");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_grep() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    
+    // Test grep with simple pattern
+    let command = "grep @pattern";
+    let params = vec![
+        Parameter {
+            name: "pattern".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("test"))?;
+    assert_eq!(result, "grep 'test'");
+    
+    // Test grep with pattern containing spaces
+    let command = "grep @pattern";
+    let params = vec![
+        Parameter {
+            name: "pattern".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("test pattern"))?;
+    assert_eq!(result, "grep 'test pattern'");
+    
+    // Test grep with pattern containing special characters
+    let command = "grep @pattern";
+    let params = vec![
+        Parameter {
+            name: "pattern".to_string(),
+            description: None,
+        },
+    ];
+    let result = substitute_parameters(command, &params, Some("test.*pattern"))?;
+    assert_eq!(result, "grep 'test.*pattern'");
+    
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_multiple_occurrences() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    let command = "echo @message && echo @message";
+    let parameters = vec![Parameter {
+        name: "message".to_string(),
+        description: None,
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("test")).unwrap();
+    assert_eq!(result, "echo test && echo test");
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}
+
+#[test]
+fn test_substitute_parameters_with_descriptions() -> Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("COMMAND_VAULT_TEST", "1");
+    let command = "echo @message:A test message";
+    let parameters = vec![Parameter {
+        name: "message".to_string(),
+        description: Some("A test message".to_string()),
+    }];
+
+    let result = substitute_parameters(command, &parameters, Some("test")).unwrap();
+    assert_eq!(result, "echo test");
+    std::env::remove_var("COMMAND_VAULT_TEST");
+    Ok(())
+}

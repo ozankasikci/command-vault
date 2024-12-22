@@ -522,7 +522,7 @@ fn test_handle_command_debug() -> Result<()> {
     
     // First add the command
     let add_command = Commands::Add {
-        command: vec!["ls".to_string()],
+        command: vec!["echo".to_string(), "test".to_string()],
         tags: vec![],
     };
     handle_command(add_command, &mut db, true)?;
