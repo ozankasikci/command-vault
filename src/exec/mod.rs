@@ -4,6 +4,7 @@ use crate::db::models::Command;
 use dialoguer::{Input, theme::ColorfulTheme};
 use colored::*;
 use crate::shell::hooks::detect_current_shell;
+use crossterm::terminal;
 
 pub struct ExecutionContext {
     pub command: String,
@@ -60,7 +61,17 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
 
     if ctx.debug_mode {
         println!("Command: {:?}", command);
-        println!("Working directory: {}", ctx.directory);
+    }
+
+    // Ensure we're in normal terminal mode before executing command
+    if !ctx.test_mode {
+        terminal::disable_raw_mode()?;
+        // Reset cursor position
+        let mut stdout = io::stdout();
+        crossterm::execute!(
+            stdout,
+            crossterm::cursor::MoveTo(0, crossterm::cursor::position()?.1)
+        )?;
     }
 
     let output = command.output()?;
@@ -73,14 +84,15 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
         ));
     }
 
+    io::stdout().write_all(&output.stdout)?;
+    io::stderr().write_all(&output.stderr)?;
+
     if ctx.debug_mode {
         if !ctx.test_mode {
             println!("Arguments: CommandArgs {{ inner: {:?} }}", 
                     if ctx.test_mode { vec!["-c", &wrapped_command] } 
                     else { vec!["-i", "-l", "-c", &wrapped_command] });
         }
-        io::stdout().write_all(&output.stdout)?;
-        io::stderr().write_all(&output.stderr)?;
     }
 
     Ok(())

@@ -203,31 +203,47 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                 input
             };
 
-            let needs_quotes = value.is_empty() || 
-                              value.contains(' ') || 
-                              value.contains('*') || 
-                              command.starts_with("grep") ||
-                              value.contains(';') ||
-                              value.contains('|') ||
-                              value.contains('>') ||
-                              value.contains('<');
+            param_values.insert(param.name.clone(), value.clone());
+        }
 
-            let quoted_value = if needs_quotes {
+        // Restore terminal and reset cursor
+        if !is_test {
+            disable_raw_mode()?;
+            stdout.queue(Clear(ClearType::All))?;
+            stdout.queue(MoveTo(0, 0))?;  // Move cursor to top-left
+            stdout.flush()?;
+        }
+
+        let mut final_command = command.to_string();
+        for (name, value) in &param_values {
+            // Quote value if it contains spaces or special characters
+            let needs_quotes = value.is_empty() || 
+                             value.contains(' ') || 
+                             value.contains('*') || 
+                             value.contains(';') ||
+                             value.contains('|') ||
+                             value.contains('>') ||
+                             value.contains('<') ||
+                             final_command.starts_with("grep");
+
+            let quoted_value = if needs_quotes && !value.starts_with('\'') && !value.starts_with('"') {
                 format!("'{}'", value.replace('\'', "'\\''"))
             } else {
-                value
+                value.clone()
             };
-            param_values.insert(param.name.clone(), quoted_value.clone());
-            final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
+
+            final_command = final_command.replace(&format!("@{}", name), &quoted_value);
         }
 
         Ok(final_command)
     })();
 
-    // Only disable raw mode if we enabled it
+    // Always ensure raw mode is disabled and cursor is reset
     if !is_test {
-        disable_raw_mode()?;
+        let _ = disable_raw_mode();
+        let _ = stdout.queue(MoveTo(0, 0));
+        let _ = stdout.flush();
     }
-    
+
     result
 }

@@ -269,12 +269,20 @@ pub fn handle_command(command: Commands, db: &mut Database, debug: bool) -> Resu
             }
             
             let current_params = parse_parameters(&command.command);
+            let final_command = substitute_parameters(&command.command, &current_params, None)?;
+
             let ctx = ExecutionContext {
-                command: substitute_parameters(&command.command, &current_params, None)?,
+                command: final_command.clone(),
                 directory: command.directory.clone(),
                 test_mode: std::env::var("COMMAND_VAULT_TEST").is_ok(),
                 debug_mode: debug,
             };
+
+            println!("\n─────────────────────────────────────────────");
+            println!("Command to execute: {}", final_command);
+            println!("Working directory: {}", command.directory);
+            println!();  // Add extra newline before command output
+
             execute_shell_command(&ctx)?;
         }
         Commands::ShellInit { shell } => {
