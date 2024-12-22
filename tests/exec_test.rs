@@ -56,10 +56,14 @@ mod tests {
             ),
         ];
 
-        // Set test mode to avoid interactive prompts
+        // Set test mode and provide test input
         env::set_var("COMMAND_VAULT_TEST", "1");
-        assert!(execute_command(&command).is_ok());
+        env::set_var("COMMAND_VAULT_TEST_INPUT", "Test message");
+        let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
+        env::remove_var("COMMAND_VAULT_TEST_INPUT");
+        
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
     }
 
     #[test]
