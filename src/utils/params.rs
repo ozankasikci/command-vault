@@ -97,25 +97,28 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
     }
     
     let result = (|| -> Result<String> {
+        let mut stdout = std::io::stdout();
+        let mut param_values = HashMap::new();
+        
+        // Only show UI in non-test mode
+        if !is_test {
+            // Clear screen and show header
+            stdout.queue(Clear(ClearType::All))?;
+            stdout.queue(MoveTo(0, HEADER_LINE))?
+                  .queue(Print("Enter values for command parameters:"))?;
+            stdout.queue(MoveTo(0, SEPARATOR_LINE))?
+                  .queue(Print("─".repeat(45).dimmed()))?;
+            stdout.flush()?;
+        }
+
         for param in parameters {
             let desc = param.description.as_deref().unwrap_or("");
             let mut input = String::new();
             let mut cursor_pos = 0;
 
-            loop {
-                // Only perform terminal operations if not in test mode
-                if !is_test {
-                    // Clear screen
-                    stdout.queue(Clear(ClearType::All))?;
-
-                    // Header
-                    stdout.queue(MoveTo(0, HEADER_LINE))?
-                          .queue(Print("Enter values for command parameters:"))?;
-
-                    // Top separator
-                    stdout.queue(MoveTo(0, SEPARATOR_LINE))?
-                          .queue(Print("─".repeat(45).dimmed()))?;
-
+            // Only show UI and handle input in non-test mode
+            if !is_test {
+                loop {
                     // Parameter info
                     stdout.queue(MoveTo(0, PARAM_LINE))?
                           .queue(Print(format!("{}: {}", "Parameter".blue().bold(), param.name.yellow())))?;
@@ -127,78 +130,55 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                     stdout.queue(MoveTo(0, INPUT_LINE))?
                           .queue(Print(format!("{}: {}", "Enter value".dimmed(), input)))?;
 
-                    // Preview section
-                    let mut preview_command = command.to_string();
-                    for (param_name, value) in &param_values {
-                        preview_command = preview_command.replace(&format!("@{}", param_name), value);
-                    }
-                    if !input.is_empty() {
-                        preview_command = preview_command.replace(&format!("@{}", param.name), &input);
-                    }
-
-                    // Bottom separator
-                    stdout.queue(MoveTo(0, PREVIEW_SEPARATOR_LINE))?
-                          .queue(Print("─".repeat(45).dimmed()))?;
-
-                    // Command preview section with softer colors
-                    stdout.queue(MoveTo(0, COMMAND_LINE))?
-                          .queue(Print(format!("{}: {}", 
-                              "Command to execute".blue().bold(), 
-                              preview_command.green()
-                          )))?;
-
-                    // Working directory with softer colors
-                    stdout.queue(MoveTo(0, WORKDIR_LINE))?
-                          .queue(Print(format!("{}: {}", 
-                              "Working directory".cyan().bold(), 
-                              std::env::current_dir()?.to_string_lossy().white()
-                          )))?;
-                    
                     // Position cursor at input
-                    let input_prompt = "Enter value: ";
                     stdout.queue(MoveTo(
-                        (input_prompt.len() + cursor_pos) as u16,
+                        ("Enter value: ".len() + cursor_pos) as u16,
                         INPUT_LINE
                     ))?;
                     
                     stdout.flush()?;
-                }
 
-                // Handle input
-                if is_test {
-                    // In test mode, use empty input
-                    break;
-                } else if let Event::Key(key) = event::read()? {
-                    match (key.code, key.modifiers) {
-                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                            return Err(anyhow!("Operation cancelled by user"));
-                        },
-                        (KeyCode::Enter, _) => break,
-                        (KeyCode::Char(c), _) => {
-                            input.insert(cursor_pos, c);
-                            cursor_pos += 1;
+                    if let Event::Key(key) = event::read()? {
+                        match (key.code, key.modifiers) {
+                            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                                return Err(anyhow!("Operation cancelled by user"));
+                            },
+                            (KeyCode::Enter, _) => break,
+                            (KeyCode::Char(c), _) => {
+                                input.insert(cursor_pos, c);
+                                cursor_pos += 1;
+                            }
+                            (KeyCode::Backspace, _) if cursor_pos > 0 => {
+                                input.remove(cursor_pos - 1);
+                                cursor_pos -= 1;
+                            }
+                            (KeyCode::Left, _) if cursor_pos > 0 => {
+                                cursor_pos -= 1;
+                            }
+                            (KeyCode::Right, _) if cursor_pos < input.len() => {
+                                cursor_pos += 1;
+                            }
+                            (KeyCode::Esc, _) => {
+                                input.clear();
+                                break;
+                            }
+                            _ => {}
                         }
-                        (KeyCode::Backspace, _) if cursor_pos > 0 => {
-                            input.remove(cursor_pos - 1);
-                            cursor_pos -= 1;
-                        }
-                        (KeyCode::Left, _) if cursor_pos > 0 => {
-                            cursor_pos -= 1;
-                        }
-                        (KeyCode::Right, _) if cursor_pos < input.len() => {
-                            cursor_pos += 1;
-                        }
-                        (KeyCode::Esc, _) => {
-                            input.clear();
-                            break;
-                        }
-                        _ => {}
                     }
                 }
             }
 
             let value = if is_test {
-                param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
+                // In test mode, use test input or default values
+                if let Some(test_mode) = test_input {
+                    if test_mode.is_empty() {
+                        param.description.as_ref().map(|d| d.clone()).unwrap_or_default()
+                    } else {
+                        test_mode.to_string()
+                    }
+                } else {
+                    "test_value".to_string()
+                }
             } else {
                 input
             };
