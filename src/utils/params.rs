@@ -18,7 +18,6 @@ use crate::db::models::Parameter;
 pub fn parse_parameters(command: &str) -> Vec<Parameter> {
     let re = Regex::new(r"@([a-zA-Z_][a-zA-Z0-9_]*)(?::([^@\s][^@]*))?").unwrap();
     let mut parameters = Vec::new();
-    let mut last_end = 0;
     
     for cap in re.captures_iter(command) {
         let name = cap[1].to_string();

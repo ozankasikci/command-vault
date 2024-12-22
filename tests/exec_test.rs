@@ -28,18 +28,22 @@ mod tests {
 
     #[test]
     fn test_command_with_working_directory() {
+        // Create a temporary directory
         let temp_dir = TempDir::new().unwrap();
-        let mut command = create_test_command("pwd");
-        command.directory = temp_dir.path().to_string_lossy().to_string();
+        let temp_path = temp_dir.path().to_string_lossy().to_string();
         
-        // Set test mode and debug mode to help diagnose issues
+        // Create a command that will print the current directory
+        let mut command = create_test_command("pwd");
+        command.directory = temp_path.clone();
+        
+        // Set test mode
         env::set_var("COMMAND_VAULT_TEST", "1");
-        env::set_var("COMMAND_VAULT_DEBUG", "1");
         let result = execute_command(&command);
         env::remove_var("COMMAND_VAULT_TEST");
-        env::remove_var("COMMAND_VAULT_DEBUG");
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        // Keep temp_dir in scope until the end of the test
+        drop(temp_dir);
     }
 
     #[test]
