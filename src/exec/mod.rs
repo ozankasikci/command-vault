@@ -1,11 +1,11 @@
 use std::io::{self, Write};
 use std::process::Command as ProcessCommand;
-use anyhow::Result;
-use dialoguer::{Input, theme::ColorfulTheme};
-use crate::shell::hooks::detect_current_shell;
-use crossterm::terminal;
-use crate::db::models::Command;
+use std::env;
 use std::path::{Path, PathBuf};
+use anyhow::Result;
+use crossterm::terminal;
+use dialoguer::{theme::ColorfulTheme, Input};
+use crate::db::models::Command;
 
 pub struct ExecutionContext {
     pub command: String,
@@ -16,72 +16,44 @@ pub struct ExecutionContext {
 
 pub fn wrap_command(command: &str, test_mode: bool) -> String {
     if test_mode {
-        // In test mode, set the test environment variable
-        format!("export COMMAND_VAULT_TEST=1; {}", command)
+        command.to_string()
     } else {
-        // For interactive mode, handle shell initialization
-        let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
-        let clean_command = command.trim_matches('"').to_string();
-            
-        match shell_type.as_str() {
-            "zsh" => format!(
-                r#"if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null || true; fi; {}"#,
-                clean_command
-            ),
-            "bash" | _ => format!(
-                r#"if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null || true; fi; if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null || true; fi; {}"#,
-                clean_command
-            ),
-        }
+        // Wrap the command to set environment variables and handle shell integration
+        format!("COMMAND_VAULT_ACTIVE=1 {}", command)
     }
 }
 
 fn is_path_traversal_attempt(command: &str, working_dir: &Path) -> bool {
-    // Split command into parts
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    
-    // Check each part that could be a path
-    for part in parts {
-        // Skip if it's a command or option
-        if part.starts_with('-') || !part.contains('/') {
-            continue;
-        }
-        
-        // Try to canonicalize the path
-        let path = Path::new(part);
-        if path.is_absolute() {
-            return true;
-        }
-        
-        if let Ok(full_path) = working_dir.join(path).canonicalize() {
-            if !full_path.starts_with(working_dir) {
-                return true;
+    // Check if the command contains path traversal attempts
+    if command.contains("..") {
+        // Get the absolute path of the working directory
+        if let Ok(working_dir) = working_dir.canonicalize() {
+            // Try to resolve any path in the command relative to working_dir
+            let potential_path = working_dir.join(command);
+            if let Ok(resolved_path) = potential_path.canonicalize() {
+                // Check if the resolved path is outside the working directory
+                return !resolved_path.starts_with(working_dir);
             }
         }
+        // If we can't resolve the paths, assume it's a traversal attempt
+        return true;
     }
-    
     false
 }
 
 pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
-    // Always use /bin/sh in test mode, otherwise use the user's shell
-    let shell = if ctx.test_mode {
-        "/bin/sh".to_string()
+    // Get the current shell
+    let shell = if cfg!(windows) {
+        String::from("cmd.exe")
     } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+        env::var("SHELL").unwrap_or_else(|_| String::from("/bin/sh"))
     };
 
+    // Wrap the command for shell execution
     let wrapped_command = wrap_command(&ctx.command, ctx.test_mode);
 
-    if ctx.debug_mode {
-        println!("Running command: {}", shell);
-        println!("Working directory: {}", ctx.directory);
-        println!("Wrapped command: {}", wrapped_command);
-    }
-
     // Check for directory traversal attempts
-    let working_dir = Path::new(&ctx.directory);
-    if is_path_traversal_attempt(&ctx.command, working_dir) {
+    if is_path_traversal_attempt(&wrapped_command, Path::new(&ctx.directory)) {
         return Err(anyhow::anyhow!("Directory traversal attempt detected"));
     }
 
@@ -92,7 +64,8 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     if ctx.test_mode {
         command.args(&["-c", &wrapped_command]);
     } else {
-        command.args(&["-i", "-l", "-c", &wrapped_command]);
+        // Use -c for both interactive and non-interactive mode to ensure consistent behavior
+        command.args(&["-c", &wrapped_command]);
     }
     
     // Set working directory
@@ -145,27 +118,26 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
 pub fn execute_command(command: &Command) -> Result<()> {
     let test_mode = std::env::var("COMMAND_VAULT_TEST").is_ok();
     let debug_mode = std::env::var("COMMAND_VAULT_DEBUG").is_ok();
-    let current_params = crate::utils::params::parse_parameters(&command.command);
-    let mut final_command = crate::utils::params::substitute_parameters(&command.command, &current_params, None)?;
+    let mut final_command = command.command.clone();
 
-    // If command has parameters, prompt for values
+    // If command has parameters, prompt for values first
     if !command.parameters.is_empty() {
-        if !test_mode {
-            println!("Enter parameters for command:");
-        }
         for param in &command.parameters {
-            let prompt = match &param.description {
-                Some(desc) => format!("{} ({})", param.name, desc),
-                None => param.name.clone(),
-            };
+            println!("Parameter: {}", param.name);
+            println!();
 
             let value = if test_mode {
-                "test_value".to_string()
+                let value = std::env::var("COMMAND_VAULT_TEST_INPUT")
+                    .unwrap_or_else(|_| "test_value".to_string());
+                println!("Enter value: {}", value);
+                println!();
+                value
             } else {
                 let input: String = Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt(&prompt)
+                    .with_prompt("Enter value")
                     .allow_empty(true)
                     .interact_text()?;
+                println!();
                 
                 if input.contains(' ') {
                     format!("'{}'", input.replace("'", "'\\''"))
@@ -184,6 +156,13 @@ pub fn execute_command(command: &Command) -> Result<()> {
         test_mode,
         debug_mode,
     };
+
+    // Print command details only once
+    println!("─────────────────────────────────────────────");
+    println!();
+    println!("Command to execute: {}", ctx.command);
+    println!("Working directory: {}", ctx.directory);
+    println!();
 
     execute_shell_command(&ctx)
 }

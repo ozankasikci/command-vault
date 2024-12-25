@@ -7,6 +7,7 @@ use tempfile::TempDir;
 use chrono::Utc;
 use std::thread;
 use std::time::Duration;
+use std::io::Cursor;
 
 #[cfg(test)]
 mod tests {
@@ -242,6 +243,68 @@ mod tests {
         cleanup_test_env();
         
         assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        drop(temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_parameter_handling() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
+        
+        let mut command = create_test_command("echo @p");
+        command.directory = dir_path.clone();
+        command.parameters = vec![
+            Parameter {
+                name: "p".to_string(),
+                description: Some("Test parameter".to_string()),
+            },
+        ];
+        
+        // Set up test environment
+        setup_test_env();
+        env::set_var("COMMAND_VAULT_TEST_INPUT", "some-value");
+        
+        // Execute command
+        let result = execute_command(&command);
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        
+        // Clean up
+        cleanup_test_env();
+        drop(temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_command_output_format() -> std::io::Result<()> {
+        let (temp_dir, temp_path) = get_safe_temp_dir()?;
+        let dir_path = temp_path.canonicalize()?.to_string_lossy().to_string();
+        
+        let mut command = create_test_command("echo @p > output.txt");
+        command.directory = dir_path.clone();
+        command.parameters = vec![
+            Parameter {
+                name: "p".to_string(),
+                description: Some("Test parameter".to_string()),
+            },
+        ];
+        
+        // Set up test environment
+        setup_test_env();
+        let test_value = "test_value";
+        env::set_var("COMMAND_VAULT_TEST_INPUT", test_value);
+        
+        // Execute command
+        let result = execute_command(&command);
+        assert!(result.is_ok(), "Command failed: {:?}", result.err());
+        
+        // Verify the command executed correctly by checking the output file
+        let output_path = PathBuf::from(&dir_path).join("output.txt");
+        let output_content = fs::read_to_string(output_path)?;
+        assert_eq!(output_content.trim(), test_value);
+        
+        // Clean up
+        cleanup_test_env();
         drop(temp_dir);
         Ok(())
     }
