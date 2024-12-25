@@ -409,3 +409,110 @@ fn test_transaction_rollback() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_parameter_handling() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+
+    // Test command with valid parameters
+    let mut cmd = Command {
+        id: None,
+        command: "test command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec![],
+        parameters: vec![
+            Parameter::new("param1".to_string()),
+            Parameter::with_description("param2".to_string(), Some("description".to_string())),
+        ],
+    };
+    let id = db.add_command(&cmd)?;
+
+    // Verify parameters were stored correctly
+    let stored = db.get_command(id)?.unwrap();
+    assert_eq!(stored.parameters.len(), 2);
+    assert_eq!(stored.parameters[0].name, "param1");
+    assert_eq!(stored.parameters[1].name, "param2");
+    assert_eq!(stored.parameters[1].description, Some("description".to_string()));
+
+    // Test updating parameters
+    cmd.id = Some(id);
+    cmd.parameters = vec![Parameter::new("new_param".to_string())];
+    db.update_command(&cmd)?;
+
+    // Verify parameters were updated
+    let updated = db.get_command(id)?.unwrap();
+    assert_eq!(updated.parameters.len(), 1);
+    assert_eq!(updated.parameters[0].name, "new_param");
+
+    Ok(())
+}
+
+#[test]
+fn test_concurrent_access() -> Result<()> {
+    use std::thread;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    
+    // Create initial database
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+    let db_path = Arc::new(db_path.to_str().unwrap().to_string());
+
+    // Add initial command
+    let cmd = Command {
+        id: None,
+        command: "initial command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["tag1".to_string()],
+        parameters: vec![],
+    };
+    let id = db.add_command(&cmd)?;
+
+    // Create multiple threads that try to modify the same command
+    let mut handles = vec![];
+    let counter = Arc::new(Mutex::new(0));
+
+    for i in 0..5 {
+        let db_path = Arc::clone(&db_path);
+        let counter = Arc::clone(&counter);
+        
+        let handle = thread::spawn(move || -> Result<()> {
+            let mut db = Database::new(&db_path)?;
+            
+            // Try to update the command
+            let mut cmd = db.get_command(id)?.unwrap();
+            cmd.command = format!("updated by thread {}", i);
+            db.update_command(&cmd)?;
+
+            // Try to add a new tag
+            db.add_tags_to_command(id, &vec![format!("tag{}", i)])?;
+
+            *counter.lock().unwrap() += 1;
+            Ok(())
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait for all threads to complete
+    for handle in handles {
+        handle.join().unwrap()?;
+    }
+
+    // Verify final state
+    let final_cmd = db.get_command(id)?.unwrap();
+    assert!(final_cmd.command.starts_with("updated by thread"));
+    assert_eq!(*counter.lock().unwrap(), 5);
+    
+    // Verify all tags were added (initial tag + 5 new tags)
+    let tags = db.list_tags()?;
+    assert!(tags.len() >= 5, "Expected at least 5 tags, got {}", tags.len());
+    
+    Ok(())
+}
