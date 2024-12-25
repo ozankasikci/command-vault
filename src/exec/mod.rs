@@ -25,7 +25,7 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
             
         match shell_type.as_str() {
             "zsh" => format!(
-                r#"if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null || true; fi; {}"#,
+                r#"emulate zsh; if [ -f ~/.zshrc ]; then . ~/.zshrc >/dev/null 2>&1; fi; {}"#,
                 clean_command
             ),
             "fish" => format!(
@@ -33,7 +33,7 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
                 clean_command
             ),
             "bash" | _ => format!(
-                r#"if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null || true; fi; if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null || true; fi; {}"#,
+                r#"if [ -f ~/.bashrc ]; then . ~/.bashrc >/dev/null 2>&1; fi; if [ -f ~/.bash_profile ]; then . ~/.bash_profile >/dev/null 2>&1; fi; {}"#,
                 clean_command
             ),
         }
