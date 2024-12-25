@@ -210,3 +210,202 @@ fn test_edge_cases() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_database_init() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    let db = Database::new(db_path.to_str().unwrap())?;
+
+    // Verify tables exist by attempting to use them
+    let conn = rusqlite::Connection::open(db_path)?;
+    
+    // Check commands table
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM commands",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(count, 0);
+
+    // Check tags table
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tags",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(count, 0);
+
+    // Check command_tags table
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM command_tags",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(count, 0);
+
+    // Verify indexes exist
+    let indexes: Vec<String> = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='index'")?
+        .query_map([], |row| row.get(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    assert!(indexes.contains(&"idx_commands_command".to_string()));
+    assert!(indexes.contains(&"idx_tags_name".to_string()));
+
+    Ok(())
+}
+
+#[test]
+fn test_list_commands_no_limit() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+
+    // Add more than the default limit of commands
+    for i in 0..100 {
+        let command = Command {
+            id: None,
+            command: format!("command {}", i),
+            timestamp: Utc::now(),
+            directory: "/test".to_string(),
+            tags: vec![],
+            parameters: Vec::new(),
+        };
+        db.add_command(&command)?;
+    }
+
+    // Test listing with no limit (0)
+    let commands = db.list_commands(0, false)?;
+    assert_eq!(commands.len(), 100);
+
+    // Test listing with no limit and ascending order
+    let commands = db.list_commands(0, true)?;
+    assert_eq!(commands.len(), 100);
+    
+    // Verify order in ascending mode
+    for i in 1..commands.len() {
+        assert!(commands[i].timestamp >= commands[i-1].timestamp);
+    }
+
+    // Verify order in descending mode (default)
+    let commands = db.list_commands(0, false)?;
+    for i in 1..commands.len() {
+        assert!(commands[i].timestamp <= commands[i-1].timestamp);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_tag_cleanup_after_deletion() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+
+    // Add two commands with overlapping tags
+    let cmd1 = Command {
+        id: None,
+        command: "command 1".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["tag1".to_string(), "tag2".to_string()],
+        parameters: Vec::new(),
+    };
+    let cmd2 = Command {
+        id: None,
+        command: "command 2".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["tag2".to_string(), "tag3".to_string()],
+        parameters: Vec::new(),
+    };
+
+    let id1 = db.add_command(&cmd1)?;
+    let id2 = db.add_command(&cmd2)?;
+
+    // Verify initial tag state
+    let tags = db.list_tags()?;
+    assert_eq!(tags.len(), 3);
+    assert!(tags.iter().any(|(name, count)| name == "tag1" && *count == 1));
+    assert!(tags.iter().any(|(name, count)| name == "tag2" && *count == 2));
+    assert!(tags.iter().any(|(name, count)| name == "tag3" && *count == 1));
+
+    // Delete first command
+    db.delete_command(id1)?;
+
+    // Verify tag1 is removed, tag2 count decreased, tag3 unchanged
+    let tags = db.list_tags()?;
+    assert_eq!(tags.len(), 2);
+    assert!(!tags.iter().any(|(name, _)| name == "tag1")); // tag1 should be removed
+    assert!(tags.iter().any(|(name, count)| name == "tag2" && *count == 1));
+    assert!(tags.iter().any(|(name, count)| name == "tag3" && *count == 1));
+
+    // Delete second command
+    db.delete_command(id2)?;
+
+    // Verify all tags are removed
+    let tags = db.list_tags()?;
+    assert_eq!(tags.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_transaction_rollback() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test.db");
+    let mut db = Database::new(db_path.to_str().unwrap())?;
+
+    // Add a command with tags
+    let cmd = Command {
+        id: None,
+        command: "test command".to_string(),
+        timestamp: Utc::now(),
+        directory: "/test".to_string(),
+        tags: vec!["tag1".to_string(), "tag2".to_string()],
+        parameters: Vec::new(),
+    };
+    let id = db.add_command(&cmd)?;
+
+    // Verify initial state
+    let command = db.get_command(id)?.unwrap();
+    assert_eq!(command.command, "test command");
+    assert_eq!(command.tags.len(), 2);
+
+    // Try to update with invalid command (id = None)
+    let mut invalid_cmd = command.clone();
+    invalid_cmd.id = None;
+    let result = db.update_command(&invalid_cmd);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("without id"));
+
+    // Verify state wasn't changed
+    let command = db.get_command(id)?.unwrap();
+    assert_eq!(command.command, "test command");
+    assert_eq!(command.tags.len(), 2);
+
+    // Try to delete non-existent command
+    let result = db.delete_command(9999);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+
+    // Verify original command still exists
+    let command = db.get_command(id)?.unwrap();
+    assert_eq!(command.command, "test command");
+    assert_eq!(command.tags.len(), 2);
+
+    // Try to add tags to non-existent command
+    let result = db.add_tags_to_command(9999, &vec!["tag3".to_string()]);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+
+    // Verify original command's tags weren't changed
+    let command = db.get_command(id)?.unwrap();
+    assert_eq!(command.tags.len(), 2);
+    assert!(command.tags.contains(&"tag1".to_string()));
+    assert!(command.tags.contains(&"tag2".to_string()));
+    assert!(!command.tags.contains(&"tag3".to_string()));
+
+    Ok(())
+}
