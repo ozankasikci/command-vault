@@ -48,7 +48,10 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                 input.split('\n').collect()
             }
         } else {
-            vec!["test_value"; parameters.len()]
+            // When no test input is provided, use descriptions
+            parameters.iter()
+                .map(|p| p.description.as_deref().unwrap_or(""))
+                .collect()
         };
 
         for (i, param) in parameters.iter().enumerate() {
@@ -65,6 +68,9 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                              value.contains('|') ||
                              value.contains('>') ||
                              value.contains('<') ||
+                             command.contains('>') ||
+                             command.contains('<') ||
+                             command.contains('|') ||
                              final_command.starts_with("grep");
 
             let quoted_value = if needs_quotes && !value.starts_with('\'') && !value.starts_with('"') {
@@ -89,20 +95,19 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
 pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Option<&str>) -> Result<String> {
     let is_test = test_input.is_some() || std::env::var("COMMAND_VAULT_TEST").is_ok();
     let result = (|| -> Result<String> {
-        if !is_test {
-            enable_raw_mode()?;
-        }
-
-        let mut stdout = stdout();
         let mut param_values: HashMap<String, String> = HashMap::new();
         let mut final_command = String::new();
 
         for param in parameters {
-            let value = if let Some(input) = test_input {
-                input.to_string()
-            } else if is_test {
-                "test_value".to_string()
+            let value = if is_test {
+                if let Some(input) = test_input {
+                    input.to_string()
+                } else {
+                    param.description.clone().unwrap_or_default()
+                }
             } else {
+                enable_raw_mode()?;
+                let mut stdout = stdout();
                 stdout.queue(Clear(ClearType::All))?;
                 
                 // Function to update the preview
@@ -193,12 +198,10 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
                             KeyCode::Enter => break,
                             KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
                                 // Handle Ctrl+C
-                                if !is_test {
-                                    disable_raw_mode()?;
-                                    stdout.queue(Clear(ClearType::All))?;
-                                    stdout.queue(MoveTo(0, 0))?;
-                                    stdout.flush()?;
-                                }
+                                disable_raw_mode()?;
+                                stdout.queue(Clear(ClearType::All))?;
+                                stdout.queue(MoveTo(0, 0))?;
+                                stdout.flush()?;
                                 return Err(anyhow::anyhow!("Operation cancelled by user"));
                             }
                             KeyCode::Char(c) => {
@@ -233,6 +236,7 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
                     }
                 }
 
+                disable_raw_mode()?;
                 value
             };
 
@@ -249,6 +253,9 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
                              value.contains('|') ||
                              value.contains('>') ||
                              value.contains('<') ||
+                             command.contains('>') ||
+                             command.contains('<') ||
+                             command.contains('|') ||
                              final_command.starts_with("grep");
 
             let quoted_value = if needs_quotes && !value.starts_with('\'') && !value.starts_with('"') {
@@ -258,24 +265,17 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
             };
 
             final_command = final_command.replace(&format!("@{}", name), &quoted_value);
+            
+            // Remove the description part from the command
+            if let Some(desc) = &parameters.iter().find(|p| p.name == *name).unwrap().description {
+                final_command = final_command.replace(&format!(":{}", desc), "");
+            }
         }
 
-        // Show final command info
         if !is_test {
+            let mut stdout = stdout();
             stdout.queue(Clear(ClearType::All))?;
-            stdout.queue(MoveTo(0, 0))?
-                  .queue(Print("─".repeat(45).dimmed()))?;
-            stdout.queue(MoveTo(0, 1))?
-                  .queue(Print(format!("{}: {}", 
-                      "Command to execute".blue().bold(), 
-                      final_command.green()
-                  )))?;
-            stdout.queue(MoveTo(0, 2))?
-                  .queue(Print(format!("{}: {}", 
-                      "Working directory".cyan().bold(), 
-                      std::env::current_dir()?.to_string_lossy().white()
-                  )))?;
-            stdout.queue(MoveTo(0, 4))?;  // Add extra newline
+            stdout.queue(MoveTo(0, 0))?;
             stdout.flush()?;
         }
 
