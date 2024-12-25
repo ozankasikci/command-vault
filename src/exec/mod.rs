@@ -6,6 +6,7 @@ use anyhow::Result;
 use crossterm::terminal;
 use dialoguer::{theme::ColorfulTheme, Input};
 use crate::db::models::Command;
+use crate::shell::hooks::detect_current_shell;
 
 pub struct ExecutionContext {
     pub command: String,
@@ -18,8 +19,24 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
     if test_mode {
         command.to_string()
     } else {
-        // Wrap the command to set environment variables and handle shell integration
-        format!("COMMAND_VAULT_ACTIVE=1 {}", command)
+        // For interactive mode, handle shell initialization
+        let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
+        let clean_command = command.trim_matches('"').to_string();
+            
+        match shell_type.as_str() {
+            "zsh" => format!(
+                r#"if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null || true; fi; {}"#,
+                clean_command
+            ),
+            "fish" => format!(
+                r#"if test -f ~/.config/fish/config.fish; source ~/.config/fish/config.fish 2>/dev/null; end; {}"#,
+                clean_command
+            ),
+            "bash" | _ => format!(
+                r#"if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null || true; fi; if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null || true; fi; {}"#,
+                clean_command
+            ),
+        }
     }
 }
 
