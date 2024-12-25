@@ -115,6 +115,24 @@ fn test_ls_command_parsing() -> Result<()> {
 }
 
 #[test]
+fn test_ls_command_default_behavior() -> Result<()> {
+    // Test ls with default values
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "ls",
+    ])?;
+
+    match args.command {
+        Commands::Ls { limit, asc } => {
+            assert_eq!(limit, 50); // Default limit is 50
+            assert!(!asc); // Default is descending order
+        }
+        _ => panic!("Expected Ls command"),
+    }
+    Ok(())
+}
+
+#[test]
 fn test_tag_commands_parsing() -> Result<()> {
     // Test tag add
     let args = Cli::try_parse_from([
@@ -246,4 +264,207 @@ fn test_missing_required_args() {
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("<QUERY>"));
+}
+
+#[test]
+fn test_search_command_default_limit() -> Result<()> {
+    // Test search with default limit
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "search",
+        "git commit",
+    ])?;
+
+    match args.command {
+        Commands::Search { query, limit } => {
+            assert_eq!(query, "git commit");
+            assert_eq!(limit, 10); // Default limit is 10
+        }
+        _ => panic!("Expected Search command"),
+    }
+    Ok(())
+}
+
+#[test]
+fn test_delete_command_parsing() -> Result<()> {
+    // Test basic delete
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "delete",
+        "42",
+    ])?;
+
+    match args.command {
+        Commands::Delete { command_id } => {
+            assert_eq!(command_id, 42);
+        }
+        _ => panic!("Expected Delete command"),
+    }
+
+    // Test missing command ID
+    let result = Cli::try_parse_from([
+        "command-vault",
+        "delete",
+    ]);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("required"));
+
+    Ok(())
+}
+
+#[test]
+fn test_shell_init_command_parsing() -> Result<()> {
+    // Test default shell initialization
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "shell-init",
+    ])?;
+
+    match args.command {
+        Commands::ShellInit { shell } => {
+            assert!(shell.is_none());
+        }
+        _ => panic!("Expected ShellInit command"),
+    }
+
+    // Test explicit shell override
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "shell-init",
+        "--shell",
+        "fish",
+    ])?;
+
+    match args.command {
+        Commands::ShellInit { shell } => {
+            assert_eq!(shell, Some("fish".to_string()));
+        }
+        _ => panic!("Expected ShellInit command"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_tag_commands_all() -> Result<()> {
+    // Test tag remove
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "tag",
+        "remove",
+        "1",
+        "git",
+    ])?;
+
+    match args.command {
+        Commands::Tag { action: TagCommands::Remove { command_id, tag } } => {
+            assert_eq!(command_id, 1);
+            assert_eq!(tag, "git");
+        }
+        _ => panic!("Expected Tag Remove command"),
+    }
+
+    // Test tag list
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "tag",
+        "list",
+    ])?;
+
+    match args.command {
+        Commands::Tag { action: TagCommands::List } => (),
+        _ => panic!("Expected Tag List command"),
+    }
+
+    // Test tag search
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "tag",
+        "search",
+        "git",
+        "--limit",
+        "5",
+    ])?;
+
+    match args.command {
+        Commands::Tag { action: TagCommands::Search { tag, limit } } => {
+            assert_eq!(tag, "git");
+            assert_eq!(limit, 5);
+        }
+        _ => panic!("Expected Tag Search command"),
+    }
+
+    // Test tag search with default limit
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "tag",
+        "search",
+        "git",
+    ])?;
+
+    match args.command {
+        Commands::Tag { action: TagCommands::Search { tag, limit } } => {
+            assert_eq!(tag, "git");
+            assert_eq!(limit, 10); // Default limit is 10
+        }
+        _ => panic!("Expected Tag Search command"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_add_command_with_parameters() -> Result<()> {
+    // Test add command with basic parameter
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "add",
+        "--",
+        "touch",
+        "@filename",
+    ])?;
+
+    match args.command {
+        Commands::Add { command, tags } => {
+            assert_eq!(command.join(" "), "touch @filename");
+            assert_eq!(tags, Vec::<String>::new());
+        }
+        _ => panic!("Expected Add command"),
+    }
+
+    // Test add command with parameter description
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "add",
+        "--",
+        "touch",
+        "@filename:Name of file to create",
+    ])?;
+
+    match args.command {
+        Commands::Add { command, tags } => {
+            assert_eq!(command.join(" "), "touch @filename:Name of file to create");
+            assert_eq!(tags, Vec::<String>::new());
+        }
+        _ => panic!("Expected Add command"),
+    }
+
+    // Test add command with parameter default value
+    let args = Cli::try_parse_from([
+        "command-vault",
+        "add",
+        "--",
+        "touch",
+        "@filename:Name of file to create=test.txt",
+    ])?;
+
+    match args.command {
+        Commands::Add { command, tags } => {
+            assert_eq!(command.join(" "), "touch @filename:Name of file to create=test.txt");
+            assert_eq!(tags, Vec::<String>::new());
+        }
+        _ => panic!("Expected Add command"),
+    }
+
+    Ok(())
 }
