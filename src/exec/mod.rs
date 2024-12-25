@@ -25,7 +25,7 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
             
         match shell_type.as_str() {
             "zsh" => format!(
-                r#"emulate zsh; if [ -f ~/.zshrc ]; then . ~/.zshrc >/dev/null 2>&1; fi; {}"#,
+                r#"setopt no_global_rcs; if [ -f ~/.zshrc ]; then ZDOTDIR=~ source ~/.zshrc; fi; {}"#,
                 clean_command
             ),
             "fish" => format!(
@@ -81,8 +81,8 @@ pub fn execute_shell_command(ctx: &ExecutionContext) -> Result<()> {
     if ctx.test_mode {
         command.args(&["-c", &wrapped_command]);
     } else {
-        // Use -c for both interactive and non-interactive mode to ensure consistent behavior
-        command.args(&["-c", &wrapped_command]);
+        // Use -i for all shells in interactive mode to ensure proper initialization
+        command.args(&["-i", "-c", &wrapped_command]);
     }
     
     // Set working directory
