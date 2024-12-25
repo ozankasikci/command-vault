@@ -253,3 +253,34 @@ fn test_detect_current_shell_fish_variants() {
         env::set_var("FISH_VERSION", version);
     }
 }
+
+#[test]
+fn test_shell_integration_paths() -> Result<()> {
+    // Test shell integration directory
+    let integration_dir = get_shell_integration_dir();
+    assert!(integration_dir.ends_with("shell"));
+
+    // Test zsh integration path
+    let zsh_path = get_zsh_integration_path();
+    assert!(zsh_path.ends_with("zsh-integration.zsh"));
+
+    // Test bash integration path
+    let bash_path = get_bash_integration_path();
+    assert!(bash_path.ends_with("bash-integration.sh"));
+
+    // Test fish integration path
+    let fish_path = get_fish_integration_path();
+    assert!(fish_path.ends_with("fish-integration.fish"));
+
+    Ok(())
+}
+
+#[test]
+fn test_init_shell_invalid_shell() -> Result<()> {
+    // Test with an invalid shell
+    let result = init_shell(Some("invalid_shell".to_string()));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unsupported shell"));
+
+    Ok(())
+}
