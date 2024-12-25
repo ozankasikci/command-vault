@@ -1,7 +1,7 @@
 use std::io::Stdout;
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode, KeyModifiers, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -27,17 +27,17 @@ pub struct AddCommandApp {
     /// Current cursor position in the command
     pub command_cursor: usize,
     /// Current line in multi-line command
-    command_line: usize,
+    pub command_line: usize,
     /// Current input mode
-    input_mode: InputMode,
+    pub input_mode: InputMode,
     /// Suggested tags
-    suggested_tags: Vec<String>,
+    pub suggested_tags: Vec<String>,
     /// Previous input mode (for returning from help)
-    previous_mode: InputMode,
+    pub previous_mode: InputMode,
 }
 
-#[derive(Default, PartialEq, Clone)]
-enum InputMode {
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum InputMode {
     #[default]
     Command,
     Tag,
@@ -349,6 +349,70 @@ impl AddCommandApp {
         if command.contains("npm") || command.contains("yarn") {
             self.suggested_tags.push("javascript".to_string());
             self.suggested_tags.push("node".to_string());
+        }
+    }
+
+    pub fn handle_key_event(&mut self, key: KeyEvent) {
+        match self.input_mode {
+            InputMode::Help => match key.code {
+                KeyCode::Char('?') | KeyCode::Esc => {
+                    self.input_mode = self.previous_mode.clone();
+                }
+                _ => {}
+            },
+            _ => match key.code {
+                KeyCode::Char('?') => {
+                    self.previous_mode = self.input_mode.clone();
+                    self.input_mode = InputMode::Help;
+                }
+                _ => match self.input_mode {
+                    InputMode::Command => match key.code {
+                        KeyCode::Char(c) => {
+                            self.command.insert(self.command_cursor, c);
+                            self.command_cursor += 1;
+                        }
+                        KeyCode::Backspace => {
+                            if self.command_cursor > 0 {
+                                self.command.remove(self.command_cursor - 1);
+                                self.command_cursor -= 1;
+                            }
+                        }
+                        KeyCode::Left => {
+                            if self.command_cursor > 0 {
+                                self.command_cursor -= 1;
+                            }
+                        }
+                        KeyCode::Right => {
+                            if self.command_cursor < self.command.len() {
+                                self.command_cursor += 1;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                                self.command.insert(self.command_cursor, '\n');
+                                self.command_cursor += 1;
+                                self.command_line += 1;
+                            } else if !self.command.is_empty() {
+                                self.input_mode = InputMode::Tag;
+                            }
+                        }
+                        _ => {}
+                    },
+                    InputMode::Tag => match key.code {
+                        KeyCode::Char(c) => {
+                            self.current_tag.push(c);
+                        }
+                        KeyCode::Enter => {
+                            if !self.current_tag.is_empty() {
+                                self.tags.push(self.current_tag.clone());
+                                self.current_tag.clear();
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
         }
     }
 }

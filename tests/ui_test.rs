@@ -1,10 +1,11 @@
 use anyhow::Result;
 use chrono::{TimeZone, Utc};
 use command_vault::{
-    db::Command,
+    db::{Command, Database},
     ui::{app::App, AddCommandApp},
 };
 use crate::test_utils::create_test_db;
+use command_vault::ui::add::InputMode;
 
 mod test_utils;
 
@@ -298,4 +299,155 @@ fn test_add_command_app_tag_operations() {
     app.tags.push("docker".to_string());
     app.tags.push("test".to_string());
     assert_eq!(app.tags, vec!["git", "docker", "test"]);
+}
+
+#[test]
+fn test_add_command_app_input_modes() {
+    use command_vault::ui::add::InputMode;
+    let mut app = AddCommandApp::new();
+    
+    // Test initial mode
+    assert!(matches!(app.input_mode, InputMode::Command));
+    
+    // Test switching to Tag mode
+    app.input_mode = InputMode::Tag;
+    assert!(matches!(app.input_mode, InputMode::Tag));
+    
+    // Test switching to Confirm mode
+    app.input_mode = InputMode::Confirm;
+    assert!(matches!(app.input_mode, InputMode::Confirm));
+    
+    // Test switching to Help mode
+    app.input_mode = InputMode::Help;
+    assert!(matches!(app.input_mode, InputMode::Help));
+    
+    // Test storing previous mode
+    app.previous_mode = InputMode::Command;
+    assert!(matches!(app.previous_mode, InputMode::Command));
+}
+
+#[test]
+fn test_add_command_app_tag_suggestions() {
+    let mut app = AddCommandApp::new();
+    
+    // Test initial state
+    assert!(app.suggested_tags.is_empty());
+    
+    // Test adding suggested tags
+    app.suggested_tags = vec!["git".to_string(), "docker".to_string()];
+    assert_eq!(app.suggested_tags, vec!["git", "docker"]);
+    
+    // Test clearing suggestions
+    app.suggested_tags.clear();
+    assert!(app.suggested_tags.is_empty());
+}
+
+#[test]
+fn test_add_command_app_multiline() {
+    let mut app = AddCommandApp::new();
+    
+    // Test initial state
+    assert_eq!(app.command_line, 0);
+    
+    // Test setting command with multiple lines
+    app.set_command("line1\nline2\nline3".to_string());
+    assert_eq!(app.command, "line1\nline2\nline3");
+    
+    // Test cursor movement across lines
+    app.command_cursor = 6;  // After "line1\n"
+    assert_eq!(app.command_cursor, 6);
+}
+
+#[test]
+fn test_add_command_app_key_events() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = AddCommandApp::new();
+
+    // Test command input
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()));
+    assert_eq!(app.command, "ls");
+    assert_eq!(app.command_cursor, 2);
+
+    // Test backspace
+    app.handle_key_event(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()));
+    assert_eq!(app.command, "l");
+    assert_eq!(app.command_cursor, 1);
+
+    // Test cursor movement
+    app.handle_key_event(KeyEvent::new(KeyCode::Left, KeyModifiers::empty()));
+    assert_eq!(app.command_cursor, 0);
+    app.handle_key_event(KeyEvent::new(KeyCode::Right, KeyModifiers::empty()));
+    assert_eq!(app.command_cursor, 1);
+
+    // Test multiline command
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+    assert_eq!(app.command, "l\na");
+    assert_eq!(app.command_line, 1);
+
+    // Test switching to tag mode
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+    assert_eq!(app.input_mode, InputMode::Tag);
+
+    // Test tag input
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty()));
+    assert_eq!(app.current_tag, "tag");
+
+    // Test adding tag
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+    assert_eq!(app.tags, vec!["tag"]);
+    assert_eq!(app.current_tag, "");
+
+    // Test help mode
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+    assert_eq!(app.input_mode, InputMode::Help);
+    assert_eq!(app.previous_mode, InputMode::Tag);
+
+    // Test exiting help mode
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+    assert_eq!(app.input_mode, InputMode::Tag);
+}
+
+#[test]
+fn test_add_command_app_help_mode() {
+    use command_vault::ui::add::InputMode;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = AddCommandApp::new();
+    
+    // Test entering help mode
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+    assert!(matches!(app.input_mode, InputMode::Help));
+    assert!(matches!(app.previous_mode, InputMode::Command));
+    
+    // Test exiting help mode with ?
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+    assert!(matches!(app.input_mode, InputMode::Command));
+    
+    // Test exiting help mode with Esc
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::empty()));
+    assert!(matches!(app.input_mode, InputMode::Help));
+    app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()));
+    assert!(matches!(app.input_mode, InputMode::Command));
+}
+
+#[test]
+fn test_add_command_app_multiline_command() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = AddCommandApp::new();
+    
+    // Test entering multiline command
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::empty()));
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::empty()));
+    
+    assert_eq!(app.command, "ls\npwd");
+    assert_eq!(app.command_line, 1);
+    assert_eq!(app.command_cursor, 6);
 }
