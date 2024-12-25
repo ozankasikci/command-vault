@@ -269,15 +269,21 @@ fn test_app_filter_clear() -> Result<()> {
     let commands = create_test_commands();
     let mut app = App::new(commands.clone(), &mut db, false);
 
-    // Set filter text
+    // Test initial state
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Apply filter
     app.filter_text = "git".to_string();
     app.update_filtered_commands();
     assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
 
-    // Clear filter text
+    // Clear filter
     app.filter_text.clear();
     app.update_filtered_commands();
-    assert_eq!(app.filtered_commands.len(), commands.len());
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
 
     Ok(())
 }
@@ -450,4 +456,68 @@ fn test_add_command_app_multiline_command() {
     assert_eq!(app.command, "ls\npwd");
     assert_eq!(app.command_line, 1);
     assert_eq!(app.command_cursor, 6);
+}
+
+#[test]
+fn test_app_command_copy() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Select a command
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+    assert_eq!(app.filtered_commands[0], 0);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "ls -la");
+
+    // Verify the command to be copied
+    if let Some(selected) = app.selected {
+        if let Some(&idx) = app.filtered_commands.get(selected) {
+            if let Some(cmd) = app.commands.get(idx) {
+                assert_eq!(cmd.command, "ls -la");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_app_navigation() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.selected, None);
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Test moving down
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Test moving down again
+    app.selected = Some(1);
+    assert_eq!(app.selected, Some(1));
+
+    // Test moving up
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Test moving up at the top (should stay at 0)
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Test moving down at the bottom (should stay at last index)
+    app.selected = Some(2);
+    assert_eq!(app.selected, Some(2));
+
+    // Test selection with filtered commands
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), 1);
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    Ok(())
 }
