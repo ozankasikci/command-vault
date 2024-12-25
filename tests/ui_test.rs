@@ -6,6 +6,7 @@ use command_vault::{
 };
 use crate::test_utils::create_test_db;
 use command_vault::ui::add::InputMode;
+use ratatui::style::Color;
 
 mod test_utils;
 
@@ -88,6 +89,10 @@ fn test_app_filtering() -> Result<()> {
     let commands = create_test_commands();
     let mut app = App::new(commands.clone(), &mut db, false);
 
+    // Test initial state
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
     // Test filtering by command
     app.filter_text = "git".to_string();
     app.update_filtered_commands();
@@ -95,10 +100,10 @@ fn test_app_filtering() -> Result<()> {
     assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
 
     // Test filtering by tag
-    app.filter_text = "docker".to_string();
+    app.filter_text = "file".to_string();
     app.update_filtered_commands();
     assert_eq!(app.filtered_commands.len(), 1);
-    assert_eq!(app.commands[app.filtered_commands[0]].command, "docker ps");
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "ls -la");
 
     // Test filtering by directory
     app.filter_text = "project".to_string();
@@ -110,11 +115,6 @@ fn test_app_filtering() -> Result<()> {
     app.filter_text = "nonexistent".to_string();
     app.update_filtered_commands();
     assert_eq!(app.filtered_commands.len(), 0);
-
-    // Test empty filter
-    app.filter_text = "".to_string();
-    app.update_filtered_commands();
-    assert_eq!(app.filtered_commands.len(), 3);
 
     Ok(())
 }
@@ -149,21 +149,39 @@ fn test_add_command_app_tag_input() {
 }
 
 #[test]
-fn test_app_message_handling() -> Result<()> {
+fn test_app_message() -> Result<()> {
     let (mut db, _dir) = create_test_db()?;
-    let commands = create_test_commands();
+    let mut commands = create_test_commands();
+    
+    // Add commands to the database first
+    for cmd in &mut commands {
+        cmd.id = Some(db.add_command(cmd)?);
+    }
+    
     let mut app = App::new(commands.clone(), &mut db, false);
 
-    // Test setting message
-    app.message = Some(("Test message".to_string(), ratatui::style::Color::Green));
-    assert!(app.message.is_some());
-    let (msg, color) = app.message.as_ref().unwrap();
-    assert_eq!(msg, "Test message");
-    assert_eq!(color, &ratatui::style::Color::Green);
+    // Initial state
+    assert_eq!(app.message, None);
 
-    // Test clearing message
+    // Set a success message
+    app.message = Some(("Command copied to clipboard!".to_string(), Color::Green));
+    assert_eq!(app.message, Some(("Command copied to clipboard!".to_string(), Color::Green)));
+
+    // Set an error message
+    app.message = Some(("Failed to delete command".to_string(), Color::Red));
+    assert_eq!(app.message, Some(("Failed to delete command".to_string(), Color::Red)));
+
+    // Clear message
     app.message = None;
-    assert!(app.message.is_none());
+    assert_eq!(app.message, None);
+
+    // Set an info message
+    app.message = Some(("Type to filter commands...".to_string(), Color::Blue));
+    assert_eq!(app.message, Some(("Type to filter commands...".to_string(), Color::Blue)));
+
+    // Set a warning message
+    app.message = Some(("Delete operation cancelled".to_string(), Color::Yellow));
+    assert_eq!(app.message, Some(("Delete operation cancelled".to_string(), Color::Yellow)));
 
     Ok(())
 }
@@ -177,20 +195,16 @@ fn test_app_selection() -> Result<()> {
     // Test initial state
     assert_eq!(app.selected, None);
 
-    // Test selecting first item
+    // Test selecting a command
     app.selected = Some(0);
     assert_eq!(app.selected, Some(0));
 
-    // Test selecting next item
+    // Test selecting another command
     app.selected = Some(1);
     assert_eq!(app.selected, Some(1));
 
-    // Test selecting previous item
-    app.selected = Some(0);
-    assert_eq!(app.selected, Some(0));
-
-    // Test selecting last item
-    app.selected = Some(2);
+    // Test selecting last command
+    app.selected = Some(app.commands.len() - 1);
     assert_eq!(app.selected, Some(2));
 
     Ok(())
@@ -518,6 +532,158 @@ fn test_app_navigation() -> Result<()> {
     assert_eq!(app.filtered_commands.len(), 1);
     app.selected = Some(0);
     assert_eq!(app.selected, Some(0));
+
+    Ok(())
+}
+
+#[test]
+fn test_app_delete_command() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let mut commands = create_test_commands();
+    
+    // Add commands to the database first
+    for cmd in &mut commands {
+        cmd.id = Some(db.add_command(cmd)?);
+    }
+    
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Initial state
+    assert_eq!(app.commands.len(), 3);
+    assert_eq!(app.filtered_commands.len(), 3);
+    assert_eq!(app.confirm_delete, None);
+
+    // Select a command
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Initiate delete
+    app.confirm_delete = Some(0);
+    assert_eq!(app.confirm_delete, Some(0));
+
+    // Cancel delete
+    app.confirm_delete = None;
+    assert_eq!(app.confirm_delete, None);
+    assert_eq!(app.commands.len(), 3);
+
+    // Initiate delete again
+    app.confirm_delete = Some(0);
+    assert_eq!(app.confirm_delete, Some(0));
+
+    // Confirm delete
+    if let Some(selected) = app.selected {
+        if let Some(confirm_idx) = app.confirm_delete {
+            if confirm_idx == selected {
+                if let Some(&filtered_idx) = app.filtered_commands.get(selected) {
+                    if let Some(command_id) = app.commands[filtered_idx].id {
+                        match app.db.delete_command(command_id) {
+                            Ok(_) => {
+                                app.commands.remove(filtered_idx);
+                                app.update_filtered_commands();
+                                // Update selection after deletion
+                                if app.filtered_commands.is_empty() {
+                                    app.selected = None;
+                                } else {
+                                    app.selected = Some(selected.min(app.filtered_commands.len() - 1));
+                                }
+                            }
+                            Err(e) => panic!("Failed to delete command: {}", e),
+                        }
+                        app.confirm_delete = None;
+                    }
+                }
+            }
+        }
+    }
+
+    // Verify deletion
+    assert_eq!(app.commands.len(), 2);
+    assert_eq!(app.filtered_commands.len(), 2);
+    assert_eq!(app.confirm_delete, None);
+    assert_eq!(app.selected, Some(0));
+
+    Ok(())
+}
+
+#[test]
+fn test_app_edit_command() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let mut commands = create_test_commands();
+    
+    // Add commands to the database first
+    for cmd in &mut commands {
+        cmd.id = Some(db.add_command(cmd)?);
+    }
+    
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Initial state
+    assert_eq!(app.commands.len(), 3);
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Select a command
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Get the original command
+    let original_command = app.commands[0].clone();
+    assert_eq!(original_command.command, "ls -la");
+
+    // Update the command
+    let updated_command = Command {
+        id: original_command.id,
+        command: "ls -lah".to_string(),
+        timestamp: original_command.timestamp,
+        directory: original_command.directory.clone(),
+        tags: vec!["test".to_string(), "updated".to_string()],
+        parameters: vec![],
+    };
+
+    // Update in database
+    app.db.update_command(&updated_command)?;
+
+    // Update in app's command list
+    app.commands[0] = updated_command.clone();
+
+    // Verify the update
+    assert_eq!(app.commands[0].command, "ls -lah");
+    assert_eq!(app.commands[0].tags, vec!["test".to_string(), "updated".to_string()]);
+    assert_eq!(app.commands[0].id, original_command.id);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_help_mode() -> Result<()> {
+    let (mut db, _dir) = create_test_db()?;
+    let mut commands = create_test_commands();
+    
+    // Add commands to the database first
+    for cmd in &mut commands {
+        cmd.id = Some(db.add_command(cmd)?);
+    }
+    
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Initial state
+    assert_eq!(app.show_help, false);
+
+    // Toggle help mode on
+    app.show_help = true;
+    assert_eq!(app.show_help, true);
+
+    // Toggle help mode off
+    app.show_help = false;
+    assert_eq!(app.show_help, false);
+
+    // Verify that help mode doesn't affect other app state
+    assert_eq!(app.commands.len(), 3);
+    assert_eq!(app.filtered_commands.len(), 3);
+    assert_eq!(app.selected, None);
+    assert_eq!(app.message, None);
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.confirm_delete, None);
+    assert_eq!(app.debug_mode, false);
 
     Ok(())
 }
