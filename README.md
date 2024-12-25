@@ -91,7 +91,7 @@ command-vault tag list # List tag related commands
 
 You can download the latest release for your platform from the [releases page](https://github.com/yourusername/command-vault/releases).
 
-#### Linux and macOS
+#### Linux
 ```bash
 # Download the latest release (replace X.Y.Z with the version number)
 curl -LO https://github.com/yourusername/command-vault/releases/download/v0.3.0/command-vault-linux-amd64
@@ -100,6 +100,18 @@ chmod +x command-vault-linux-amd64
 # Move it to your PATH
 sudo mv command-vault-linux-amd64 /usr/local/bin/command-vault
 
+# Initialize shell integration (add to your .bashrc or .zshrc)
+source "$(command-vault shell-init)"
+```
+
+#### macOS
+```bash
+# Download the latest release (replace X.Y.Z with the version number)
+curl -LO https://github.com/yourusername/command-vault/releases/download/v0.3.0/command-vault-macos-arm64
+# Make it executable
+chmod +x command-vault-macos-arm64
+# Move it to your PATH
+sudo mv command-vault-macos-arm64 /usr/local/bin/command-vault
 # Initialize shell integration (add to your .bashrc or .zshrc)
 source "$(command-vault shell-init)"
 ```
