@@ -94,7 +94,7 @@ You can download the latest release for your platform from the [releases page](h
 #### Linux and macOS
 ```bash
 # Download the latest release (replace X.Y.Z with the version number)
-curl -LO https://github.com/yourusername/command-vault/releases/download/v0.2.0/command-vault-linux-amd64
+curl -LO https://github.com/yourusername/command-vault/releases/download/v0.3.0/command-vault-linux-amd64
 # Make it executable
 chmod +x command-vault-linux-amd64
 # Move it to your PATH

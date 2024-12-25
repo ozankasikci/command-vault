@@ -174,7 +174,27 @@ impl Database {
             return Err(anyhow!("Command not found"));
         }
         
+        // Get current tags
+        let mut current_tags = Vec::new();
+        {
+            let mut stmt = tx.prepare(
+                "SELECT t.name 
+                 FROM tags t 
+                 JOIN command_tags ct ON ct.tag_id = t.id 
+                 WHERE ct.command_id = ?1"
+            )?;
+            let mut rows = stmt.query([command_id])?;
+            while let Some(row) = rows.next()? {
+                current_tags.push(row.get::<_, String>(0)?);
+            }
+        }
+        
         for tag in tags {
+            // Skip if tag already exists
+            if current_tags.contains(tag) {
+                continue;
+            }
+            
             // Insert or get tag
             tx.execute(
                 "INSERT OR IGNORE INTO tags (name) VALUES (?1)",
@@ -192,7 +212,16 @@ impl Database {
                 "INSERT OR IGNORE INTO command_tags (command_id, tag_id) VALUES (?1, ?2)",
                 rusqlite::params![command_id, tag_id],
             )?;
+            
+            // Update tags string in commands table
+            current_tags.push(tag.clone());
         }
+        
+        // Update the tags string in the commands table
+        tx.execute(
+            "UPDATE commands SET tags = ?1 WHERE id = ?2",
+            rusqlite::params![current_tags.join(","), command_id],
+        )?;
         
         tx.commit()?;
         Ok(())
@@ -385,35 +414,53 @@ impl Database {
         Ok(commands)
     }
 
-    /// Retrieves a command by its ID.
+    /// Gets a command by its ID.
     /// 
     /// # Arguments
     /// * `id` - The ID of the command to retrieve
     /// 
     /// # Returns
-    /// * `Result<Option<Command>>` - The command if found, or None if not found
+    /// * `Result<Option<Command>>` - The command if found
     pub fn get_command(&self, id: i64) -> Result<Option<Command>> {
+        // First get the command details
         let mut stmt = self.conn.prepare(
-            "SELECT id, command, timestamp, directory, tags, parameters 
-             FROM commands
-             WHERE id = ?"
+            "SELECT command, timestamp, directory, parameters 
+             FROM commands 
+             WHERE id = ?1"
         )?;
 
-        let mut rows = stmt.query([id])?;
-        
-        if let Some(row) = rows.next()? {
+        let command = stmt.query_row([id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        });
+
+        if let Ok((command, timestamp, directory, parameters)) = command {
+            // Then get the tags
+            let mut stmt = self.conn.prepare(
+                "SELECT t.name 
+                 FROM tags t 
+                 JOIN command_tags ct ON ct.tag_id = t.id 
+                 WHERE ct.command_id = ?1"
+            )?;
+
+            let mut tags = Vec::new();
+            let mut rows = stmt.query([id])?;
+            while let Some(row) = rows.next()? {
+                tags.push(row.get::<_, String>(0)?);
+            }
+
             Ok(Some(Command {
-                id: Some(row.get(0)?),
-                command: row.get(1)?,
-                timestamp: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
+                id: Some(id),
+                command,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&timestamp)?
                     .with_timezone(&Utc),
-                directory: row.get(3)?,
-                tags: row.get::<_, String>(4)?
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(|s| s.to_string())
-                    .collect(),
-                parameters: serde_json::from_str(&row.get::<_, String>(5)?)?,
+                directory,
+                tags,
+                parameters: serde_json::from_str(&parameters)?,
             }))
         } else {
             Ok(None)
