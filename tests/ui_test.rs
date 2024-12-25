@@ -41,16 +41,31 @@ fn create_test_commands() -> Vec<Command> {
 
 #[test]
 fn test_app_new() -> Result<()> {
-    let (mut db, _dir) = create_test_db()?;
-    let commands = vec![];
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = vec![
+        Command {
+            id: Some(1),
+            command: "test command".to_string(),
+            timestamp: Utc::now(),
+            directory: "/test".to_string(),
+            tags: vec!["test".to_string(), "example".to_string()],
+            parameters: vec![],
+        }
+    ];
+    
     let app = App::new(commands.clone(), &mut db, false);
-    assert_eq!(app.commands.len(), 0);
+    
+    assert_eq!(app.commands, commands);
     assert_eq!(app.selected, None);
     assert_eq!(app.show_help, false);
     assert_eq!(app.message, None);
     assert_eq!(app.filter_text, "");
-    assert_eq!(app.filtered_commands.len(), 0);
+    assert_eq!(app.filtered_commands, vec![0]);
+    assert_eq!(app.confirm_delete, None);
     assert_eq!(app.debug_mode, false);
+    
     Ok(())
 }
 
@@ -684,6 +699,284 @@ fn test_app_help_mode() -> Result<()> {
     assert_eq!(app.filter_text, "");
     assert_eq!(app.confirm_delete, None);
     assert_eq!(app.debug_mode, false);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_message_handling() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = vec![];
+    let mut app = App::new(commands, &mut db, false);
+    
+    // Test setting a message
+    app.set_message("Test message".to_string(), Color::Green);
+    assert_eq!(app.message, Some(("Test message".to_string(), Color::Green)));
+    
+    // Test setting a success message
+    app.set_success_message("Success message".to_string());
+    assert_eq!(app.message, Some(("Success message".to_string(), Color::Green)));
+    
+    // Test setting an error message
+    app.set_error_message("Error message".to_string());
+    assert_eq!(app.message, Some(("Error message".to_string(), Color::Red)));
+    
+    // Test clearing the message
+    app.clear_message();
+    assert_eq!(app.message, None);
+    
+    Ok(())
+}
+
+#[test]
+fn test_app_selection_methods() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.get_selection(), None);
+
+    // Test setting valid selection
+    app.set_selection(Some(1));
+    assert_eq!(app.get_selection(), Some(1));
+
+    // Test setting selection to None
+    app.set_selection(None);
+    assert_eq!(app.get_selection(), None);
+
+    // Test setting selection to last index
+    app.set_selection(Some(app.commands.len() - 1));
+    assert_eq!(app.get_selection(), Some(app.commands.len() - 1));
+
+    // Test that selection is maintained after filtering
+    app.set_selection(Some(1));
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.get_selection(), Some(0)); // Selection should adjust to filtered index
+
+    Ok(())
+}
+
+#[test]
+fn test_app_navigation_methods() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.selected, None);
+
+    // Test select_next from None
+    app.select_next();
+    assert_eq!(app.selected, Some(0));
+
+    // Test select_next from first item
+    app.select_next();
+    assert_eq!(app.selected, Some(1));
+
+    // Test select_next from last item (should stay at last)
+    app.selected = Some(app.filtered_commands.len() - 1);
+    app.select_next();
+    assert_eq!(app.selected, Some(app.filtered_commands.len() - 1));
+
+    // Test select_previous from middle
+    app.selected = Some(1);
+    app.select_previous();
+    assert_eq!(app.selected, Some(0));
+
+    // Test select_previous from first item (should stay at first)
+    app.select_previous();
+    assert_eq!(app.selected, Some(0));
+
+    // Test select_previous from None (should go to last)
+    app.selected = None;
+    app.select_previous();
+    assert_eq!(app.selected, Some(app.filtered_commands.len() - 1));
+
+    // Test with filtered list
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filtered_commands.len(), 1);
+
+    // Test navigation with filtered list
+    app.selected = None;
+    app.select_next();
+    assert_eq!(app.selected, Some(0));
+    app.select_next();
+    assert_eq!(app.selected, Some(0)); // Should stay at 0 since there's only one item
+
+    Ok(())
+}
+
+#[test]
+fn test_app_filter_methods() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Test set_filter
+    app.set_filter("git".to_string());
+    assert_eq!(app.filter_text, "git");
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test clear_filter
+    app.clear_filter();
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Test append_to_filter
+    app.append_to_filter('d');
+    app.append_to_filter('o');
+    app.append_to_filter('c');
+    assert_eq!(app.filter_text, "doc");
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "docker ps");
+
+    // Test backspace_filter
+    app.backspace_filter();
+    assert_eq!(app.filter_text, "do");
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "docker ps");
+
+    // Test backspace_filter until empty
+    app.backspace_filter();
+    app.backspace_filter();
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Test case insensitive filtering
+    app.set_filter("GIT".to_string());
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test filtering by tag
+    app.set_filter("file".to_string());
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "ls -la");
+
+    // Test filtering by directory
+    app.set_filter("project".to_string());
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test no matches
+    app.set_filter("nonexistent".to_string());
+    assert_eq!(app.filtered_commands.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_selected_command_methods() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.get_selected_command(), None);
+    assert_eq!(app.get_selected_index(), None);
+
+    // Test with valid selection
+    app.selected = Some(0);
+    assert_eq!(app.get_selected_command().unwrap().command, "ls -la");
+    assert_eq!(app.get_selected_index(), Some(0));
+
+    // Test with filtered list
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    app.selected = Some(0);
+    assert_eq!(app.get_selected_command().unwrap().command, "git status");
+    assert_eq!(app.get_selected_index(), Some(1)); // Index in original commands list
+
+    // Test with invalid selection
+    app.selected = Some(5); // Out of bounds
+    assert_eq!(app.get_selected_command(), None);
+    assert_eq!(app.get_selected_index(), None);
+
+    // Test with empty filtered list
+    app.filter_text = "nonexistent".to_string();
+    app.update_filtered_commands();
+    app.selected = Some(0);
+    assert_eq!(app.get_selected_command(), None);
+    assert_eq!(app.get_selected_index(), None);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_selection_update_methods() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test update_selection_after_filter
+
+    // Test with no selection
+    assert_eq!(app.selected, None);
+    app.update_selection_after_filter();
+    assert_eq!(app.selected, None);
+
+    // Test with selection and empty filtered list
+    app.selected = Some(0);
+    app.filter_text = "nonexistent".to_string();
+    app.update_filtered_commands();
+    app.update_selection_after_filter();
+    assert_eq!(app.selected, None);
+
+    // Test with selection and filtered list smaller than selection
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    app.selected = Some(2); // Out of bounds for filtered list
+    app.update_selection_after_filter();
+    assert_eq!(app.selected, Some(0)); // Should adjust to last item in filtered list
+
+    // Test update_selection_after_delete
+
+    // Reset to initial state
+    app.filter_text.clear();
+    app.update_filtered_commands();
+    
+    // Test with no selection
+    app.selected = None;
+    app.update_selection_after_delete(0);
+    assert_eq!(app.selected, None);
+
+    // Test with selection and empty filtered list
+    app.selected = Some(0);
+    app.filtered_commands.clear();
+    app.update_selection_after_delete(0);
+    assert_eq!(app.selected, None);
+
+    // Test with selection after deleting item
+    app.filtered_commands = vec![0, 1, 2];
+    app.selected = Some(2);
+    app.filtered_commands.remove(1); // Remove middle item
+    app.update_selection_after_delete(1);
+    assert_eq!(app.selected, Some(1)); // Should adjust to new length
+
+    // Test with selection at end after deleting last item
+    app.selected = Some(1);
+    app.filtered_commands.pop(); // Remove last item
+    app.update_selection_after_delete(1);
+    assert_eq!(app.selected, Some(0)); // Should adjust to new last item
 
     Ok(())
 }

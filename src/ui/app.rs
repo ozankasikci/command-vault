@@ -83,99 +83,72 @@ impl<'a> App<'a> {
                         continue;
                     }
                     KeyCode::Char('c') => {
-                        if let Some(selected) = self.selected {
-                            if let Some(&idx) = self.filtered_commands.get(selected) {
-                                if let Some(cmd) = self.commands.get(idx) {
-                                    copy_to_clipboard(&cmd.command)?;
-                                    self.message = Some(("Command copied to clipboard!".to_string(), Color::Green));
-                                }
-                            }
+                        if let Some(cmd) = self.get_selected_command() {
+                            copy_to_clipboard(&cmd.command)?;
+                            self.set_success_message("Command copied to clipboard!".to_string());
                         }
                     }
                     KeyCode::Char('y') => {
-                        if let Some(selected) = self.selected {
-                            if let Some(&idx) = self.filtered_commands.get(selected) {
-                                if let Some(cmd) = self.commands.get(idx) {
-                                    copy_to_clipboard(&cmd.command)?;
-                                    self.message = Some(("Command copied to clipboard!".to_string(), Color::Green));
-                                }
-                            }
+                        if let Some(cmd) = self.get_selected_command() {
+                            copy_to_clipboard(&cmd.command)?;
+                            self.set_success_message("Command copied to clipboard!".to_string());
                         }
                     }
                     KeyCode::Enter => {
-                        if let Some(selected) = self.selected {
+                        if let Some(selected) = self.get_selection() {
                             if let Some(confirm_idx) = self.confirm_delete {
                                 if confirm_idx == selected {
-                                    if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
-                                        if let Some(command_id) = self.commands[filtered_idx].id {
+                                    if let Some(idx) = self.get_selected_index() {
+                                        if let Some(command_id) = self.commands[idx].id {
                                             match self.db.delete_command(command_id) {
                                                 Ok(_) => {
-                                                    self.commands.remove(filtered_idx);
-                                                    self.message = Some(("Command deleted successfully".to_string(), Color::Green));
+                                                    self.commands.remove(idx);
+                                                    self.set_success_message("Command deleted successfully".to_string());
                                                     self.update_filtered_commands();
-                                                    // Update selection after deletion
-                                                    if self.filtered_commands.is_empty() {
-                                                        self.selected = None;
-                                                    } else {
-                                                        self.selected = Some(selected.min(self.filtered_commands.len() - 1));
-                                                    }
+                                                    self.update_selection_after_delete(idx);
                                                 }
                                                 Err(e) => {
-                                                    self.message = Some((format!("Failed to delete command: {}", e), Color::Red));
+                                                    self.set_error_message(format!("Failed to delete command: {}", e));
                                                 }
                                             }
                                             self.confirm_delete = None;
                                         }
                                     }
                                 }
-                            } else if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
-                                if let Some(cmd) = self.commands.get(filtered_idx) {
-                                    // Exit TUI temporarily
-                                    restore_terminal(terminal)?;
-                                    
-                                    // Re-enable colors after restoring terminal
-                                    colored::control::set_override(true);
+                            } else if let Some(cmd) = self.get_selected_command() {
+                                // Exit TUI temporarily
+                                restore_terminal(terminal)?;
+                                
+                                // Re-enable colors after restoring terminal
+                                colored::control::set_override(true);
 
-                                    // If command has parameters, substitute them with user input
-                                    let current_params = parse_parameters(&cmd.command);
-                                    let final_command = substitute_parameters(&cmd.command, &current_params, None)?;
-                                    let ctx = ExecutionContext {
-                                        command: final_command,
-                                        directory: cmd.directory.clone(),
-                                        test_mode: false,
-                                        debug_mode: self.debug_mode,
-                                    };
-                                    execute_shell_command(&ctx)?;
-                                    
-                                    return Ok(());
-                                }
+                                // If command has parameters, substitute them with user input
+                                let current_params = parse_parameters(&cmd.command);
+                                let final_command = substitute_parameters(&cmd.command, &current_params, None)?;
+                                let ctx = ExecutionContext {
+                                    command: final_command,
+                                    directory: cmd.directory.clone(),
+                                    test_mode: false,
+                                    debug_mode: self.debug_mode,
+                                };
+                                execute_shell_command(&ctx)?;
+                                
+                                return Ok(());
                             }
                         }
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        if let Some(selected) = self.selected {
-                            if selected < self.filtered_commands.len() - 1 {
-                                self.selected = Some(selected + 1);
-                            }
-                        } else if !self.filtered_commands.is_empty() {
-                            self.selected = Some(0);
-                        }
+                        self.select_next();
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
-                        if let Some(selected) = self.selected {
-                            if selected > 0 {
-                                self.selected = Some(selected - 1);
-                            }
-                        } else if !self.filtered_commands.is_empty() {
-                            self.selected = Some(self.filtered_commands.len() - 1);
-                        }
+                        self.select_previous();
                     }
                     KeyCode::Char('/') => {
-                        self.filter_text.clear();
-                        self.message = Some(("Type to filter commands...".to_string(), Color::Blue));
+                        self.clear_filter();
+                        self.set_message("Type to filter commands...".to_string(), Color::Blue);
                     }
                     KeyCode::Char('e') => {
-                        if let Some(selected) = self.selected {
+                        if let Some(selected) = self.get_selection() {
                             if let Some(&idx) = self.filtered_commands.get(selected) {
                                 if let Some(cmd) = self.commands.get(idx).cloned() {
                                     // Exit TUI temporarily
@@ -207,20 +180,20 @@ impl<'a> App<'a> {
                                             };
                                             
                                             if let Err(e) = self.db.update_command(&updated_cmd) {
-                                                self.message = Some((format!("Failed to update command: {}", e), Color::Red));
+                                                self.set_error_message(format!("Failed to update command: {}", e));
                                             } else {
                                                 // Update local command list
                                                 if let Some(cmd) = self.commands.get_mut(idx) {
                                                     *cmd = updated_cmd;
                                                 }
-                                                self.message = Some(("Command updated successfully!".to_string(), Color::Green));
+                                                self.set_success_message("Command updated successfully!".to_string());
                                             }
                                         }
                                         Ok(None) => {
-                                            self.message = Some(("Edit cancelled".to_string(), Color::Yellow));
+                                            self.set_message("Edit cancelled".to_string(), Color::Yellow);
                                         }
                                         Err(e) => {
-                                            self.message = Some((format!("Error during edit: {}", e), Color::Red));
+                                            self.set_error_message(format!("Error during edit: {}", e));
                                         }
                                     }
                                 }
@@ -229,7 +202,7 @@ impl<'a> App<'a> {
                         continue;
                     }
                     KeyCode::Char('d') => {
-                        if let Some(selected) = self.selected {
+                        if let Some(selected) = self.get_selection() {
                             if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
                                 if let Some(command_id) = self.commands[filtered_idx].id {
                                     self.confirm_delete = Some(selected);
@@ -239,24 +212,21 @@ impl<'a> App<'a> {
                     }
                     KeyCode::Char(c) => {
                         if c == '/' {  // Skip if it's the '/' character that started filter mode
-                            self.filter_text.clear();
-                            self.message = Some(("Type to filter commands...".to_string(), Color::Blue));
+                            self.clear_filter();
+                            self.set_message("Type to filter commands...".to_string(), Color::Blue);
                         } else if c != '/' {  // Skip if it's the '/' character that started filter mode
-                            self.filter_text.push(c);
-                            self.update_filtered_commands();
+                            self.append_to_filter(c);
                         }
                     }
-                    KeyCode::Backspace if !self.filter_text.is_empty() => {
-                        self.filter_text.pop();
-                        self.update_filtered_commands();
+                    KeyCode::Backspace => {
+                        self.backspace_filter();
                     }
                     KeyCode::Esc => {
                         if !self.filter_text.is_empty() {
-                            self.filter_text.clear();
-                            self.update_filtered_commands();
+                            self.clear_filter();
                         } else if self.confirm_delete.is_some() {
                             self.confirm_delete = None;
-                            self.message = Some(("Delete operation cancelled".to_string(), Color::Yellow));
+                            self.set_message("Delete operation cancelled".to_string(), Color::Yellow);
                         }
                     }
                     _ => {}
@@ -265,26 +235,41 @@ impl<'a> App<'a> {
         }
     }
 
-    /// Update the filtered commands list based on the current filter text
-    pub fn update_filtered_commands(&mut self) {
-        let search_term = self.filter_text.to_lowercase();
-        self.filtered_commands = (0..self.commands.len())
-            .filter(|&i| {
-                let cmd = &self.commands[i];
-                cmd.command.to_lowercase().contains(&search_term) ||
-                cmd.tags.iter().any(|tag| tag.to_lowercase().contains(&search_term)) ||
-                cmd.directory.to_lowercase().contains(&search_term)
-            })
-            .collect();
-        
-        // Update selection
-        if self.filtered_commands.is_empty() {
-            self.selected = None;
-        } else if let Some(selected) = self.selected {
-            if selected >= self.filtered_commands.len() {
-                self.selected = Some(self.filtered_commands.len() - 1);
-            }
+    pub fn clear_filter(&mut self) {
+        self.filter_text.clear();
+        self.update_filtered_commands();
+    }
+
+    pub fn set_filter(&mut self, text: String) {
+        self.filter_text = text;
+        self.update_filtered_commands();
+    }
+
+    pub fn append_to_filter(&mut self, c: char) {
+        self.filter_text.push(c);
+        self.update_filtered_commands();
+    }
+
+    pub fn backspace_filter(&mut self) {
+        if !self.filter_text.is_empty() {
+            self.filter_text.pop();
+            self.update_filtered_commands();
         }
+    }
+
+    fn matches_filter(&self, command: &Command, search_term: &str) -> bool {
+        let search_term = search_term.to_lowercase();
+        command.command.to_lowercase().contains(&search_term) ||
+        command.tags.iter().any(|tag| tag.to_lowercase().contains(&search_term)) ||
+        command.directory.to_lowercase().contains(&search_term)
+    }
+
+    pub fn update_filtered_commands(&mut self) {
+        self.filtered_commands = (0..self.commands.len())
+            .filter(|&i| self.matches_filter(&self.commands[i], &self.filter_text))
+            .collect::<Vec<usize>>();
+        
+        self.update_selection_after_filter();
     }
 
     fn ui(&mut self, f: &mut ratatui::Frame) {
@@ -474,6 +459,86 @@ impl<'a> App<'a> {
                 }
             }
         }
+    }
+
+    pub fn set_message(&mut self, text: String, color: Color) {
+        self.message = Some((text, color));
+    }
+
+    pub fn clear_message(&mut self) {
+        self.message = None;
+    }
+
+    pub fn set_success_message(&mut self, text: String) {
+        self.set_message(text, Color::Green);
+    }
+
+    pub fn set_error_message(&mut self, text: String) {
+        self.set_message(text, Color::Red);
+    }
+
+    pub fn get_selection(&self) -> Option<usize> {
+        self.selected
+    }
+
+    pub fn set_selection(&mut self, index: Option<usize>) {
+        if let Some(idx) = index {
+            if idx < self.filtered_commands.len() {
+                self.selected = Some(idx);
+            }
+        } else {
+            self.selected = None;
+        }
+    }
+
+    pub fn update_selection_after_filter(&mut self) {
+        if self.filtered_commands.is_empty() {
+            self.selected = None;
+        } else if let Some(selected) = self.selected {
+            if selected >= self.filtered_commands.len() {
+                self.selected = Some(self.filtered_commands.len() - 1);
+            }
+        }
+    }
+
+    pub fn update_selection_after_delete(&mut self, deleted_index: usize) {
+        if self.filtered_commands.is_empty() {
+            self.selected = None;
+        } else if let Some(selected) = self.selected {
+            self.selected = Some(selected.min(self.filtered_commands.len() - 1));
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if let Some(selected) = self.selected {
+            if selected < self.filtered_commands.len() - 1 {
+                self.selected = Some(selected + 1);
+            }
+        } else if !self.filtered_commands.is_empty() {
+            self.selected = Some(0);
+        }
+    }
+
+    pub fn select_previous(&mut self) {
+        if let Some(selected) = self.selected {
+            if selected > 0 {
+                self.selected = Some(selected - 1);
+            }
+        } else if !self.filtered_commands.is_empty() {
+            self.selected = Some(self.filtered_commands.len() - 1);
+        }
+    }
+
+    pub fn get_selected_command(&self) -> Option<&Command> {
+        self.selected
+            .and_then(|selected| self.filtered_commands.get(selected))
+            .and_then(|&idx| self.commands.get(idx))
+    }
+
+    pub fn get_selected_index(&self) -> Option<usize> {
+        self.selected
+            .and_then(|selected| self.filtered_commands.get(selected))
+            .copied()
     }
 }
 

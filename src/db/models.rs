@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 ///     parameters: vec![],
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Command {
     /// Unique identifier for the command
     pub id: Option<i64>,
