@@ -20,7 +20,7 @@ pub fn wrap_command(command: &str, test_mode: bool) -> String {
         command.to_string()
     } else {
         // For interactive mode, handle shell initialization
-        let shell_type = detect_current_shell().unwrap_or_else(|| "bash".to_string());
+        let shell_type = detect_current_shell();
         let clean_command = command.trim_matches('"').to_string();
             
         match shell_type.as_str() {

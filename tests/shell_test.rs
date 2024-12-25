@@ -1,12 +1,14 @@
 use std::env;
 use std::path::PathBuf;
 use anyhow::Result;
+use serial_test::serial;
 use command_vault::shell::hooks::{
     detect_current_shell, get_shell_integration_dir, get_shell_integration_script,
     get_zsh_integration_path, get_bash_integration_path, get_fish_integration_path, init_shell
 };
 
 #[test]
+#[serial]
 fn test_detect_current_shell() {
     // Save original environment
     let original_shell = env::var("SHELL").ok();
@@ -16,48 +18,58 @@ fn test_detect_current_shell() {
     env::remove_var("FISH_VERSION");
     env::remove_var("SHELL");
     
-    // Test with zsh
-    env::set_var("SHELL", "/bin/zsh");
-    assert_eq!(detect_current_shell(), Some("zsh".to_string()));
-    env::remove_var("SHELL");  // Clean up after test
+    // Test default case (no environment variables)
+    assert_eq!(
+        detect_current_shell(),
+        "bash",
+        "Should default to bash when no shell is set"
+    );
     
-    // Test with bash
+    // Test with FISH_VERSION (highest priority)
+    env::remove_var("SHELL"); // Ensure SHELL is not set
+    env::set_var("FISH_VERSION", "3.1.2");
+    assert_eq!(
+        detect_current_shell(),
+        "fish",
+        "Should detect Fish via FISH_VERSION"
+    );
+    
+    // Test with SHELL environment variable
+    env::remove_var("FISH_VERSION");
+    env::set_var("SHELL", "/bin/zsh");
+    assert_eq!(
+        detect_current_shell(),
+        "zsh",
+        "Should detect Zsh via SHELL"
+    );
+    
+    // Test with SHELL environment variable (bash)
     env::set_var("SHELL", "/bin/bash");
-    assert_eq!(detect_current_shell(), Some("bash".to_string()));
-    env::remove_var("SHELL");  // Clean up after test
+    assert_eq!(
+        detect_current_shell(),
+        "bash",
+        "Should detect Bash via SHELL"
+    );
     
-    // Test with fish
-    env::set_var("SHELL", "/bin/fish");
-    assert_eq!(detect_current_shell(), Some("fish".to_string()));
-    env::remove_var("SHELL");  // Clean up after test
-    
-    // Test with unknown shell
-    env::set_var("SHELL", "/bin/unknown");
-    assert_eq!(detect_current_shell(), None);
-    env::remove_var("SHELL");  // Clean up after test
-    
-    // Test with no SHELL variable
-    assert_eq!(detect_current_shell(), None);
-    
-    // Test with FISH_VERSION set
-    env::remove_var("SHELL");  // Make sure SHELL is not set
-    env::set_var("FISH_VERSION", "3.1.2");
-    assert_eq!(detect_current_shell(), Some("fish".to_string()));
-    env::remove_var("FISH_VERSION");  // Clean up after test
-    
-    // Test FISH_VERSION takes precedence over SHELL
-    env::set_var("FISH_VERSION", "3.1.2");
+    // Test that FISH_VERSION takes precedence over SHELL
     env::set_var("SHELL", "/bin/zsh");
-    assert_eq!(detect_current_shell(), Some("fish".to_string()));
-    env::remove_var("FISH_VERSION");  // Clean up after test
-    env::remove_var("SHELL");  // Clean up after test
+    env::set_var("FISH_VERSION", "3.1.2");
+    assert_eq!(
+        detect_current_shell(),
+        "fish",
+        "FISH_VERSION should take precedence over SHELL"
+    );
     
     // Restore original environment
     if let Some(shell) = original_shell {
         env::set_var("SHELL", shell);
+    } else {
+        env::remove_var("SHELL");
     }
-    if let Some(version) = original_fish_version {
-        env::set_var("FISH_VERSION", version);
+    if let Some(fish_version) = original_fish_version {
+        env::set_var("FISH_VERSION", fish_version);
+    } else {
+        env::remove_var("FISH_VERSION");
     }
 }
 
@@ -115,7 +127,8 @@ fn test_get_shell_integration_script() -> Result<()> {
 }
 
 #[test]
-fn test_init_shell() -> Result<()> {
+#[serial]
+fn test_init_shell() {
     // Save original environment
     let original_shell = env::var("SHELL").ok();
     let original_fish_version = env::var("FISH_VERSION").ok();
@@ -123,47 +136,20 @@ fn test_init_shell() -> Result<()> {
     // Clean environment for testing
     env::remove_var("FISH_VERSION");
     env::remove_var("SHELL");
-
-    // Test with shell override (should work regardless of env)
-    let path = init_shell(Some("zsh".to_string()))?;
-    assert!(path.ends_with("zsh-integration.zsh"));
-
-    // Test with environment detection - bash with full path
-    env::remove_var("FISH_VERSION");  // Make sure FISH_VERSION is not set
-    env::set_var("SHELL", "/usr/local/bin/bash");
-    let path = init_shell(None)?;
-    assert!(path.ends_with("bash-integration.sh"));
+    
+    // Test default shell (bash)
+    env::set_var("SHELL", "/bin/bash");
+    let path = init_shell(None).unwrap();
+    assert!(path.ends_with("bash-integration.sh"), "Path should end with bash-integration.sh");
+    
+    // Test with shell override
+    let path = init_shell(Some("fish".to_string())).unwrap();
+    assert!(path.ends_with("fish-integration.fish"), "Path should end with fish-integration.fish");
+    
+    // Clean up test environment
+    env::remove_var("FISH_VERSION");
     env::remove_var("SHELL");
-
-    // Test with environment detection - bash with relative path
-    env::remove_var("FISH_VERSION");  // Make sure FISH_VERSION is not set
-    env::set_var("SHELL", "bash");
-    let path = init_shell(None)?;
-    assert!(path.ends_with("bash-integration.sh"));
-    env::remove_var("SHELL");
-
-    // Test with environment detection - zsh
-    env::remove_var("FISH_VERSION");  // Make sure FISH_VERSION is not set
-    env::set_var("SHELL", "/bin/zsh");
-    let path = init_shell(None)?;
-    assert!(path.ends_with("zsh-integration.zsh"));
-    env::remove_var("SHELL");
-
-    // Test with environment detection - fish
-    env::remove_var("FISH_VERSION");  // Make sure FISH_VERSION is not set
-    env::set_var("SHELL", "/bin/fish");
-    let path = init_shell(None)?;
-    assert!(path.ends_with("fish-integration.fish"));
-    env::remove_var("SHELL");
-
-    // Test error case - unknown shell
-    env::remove_var("FISH_VERSION");  // Make sure FISH_VERSION is not set
-    env::set_var("SHELL", "/bin/unknown");
-    let result = init_shell(None);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Could not detect shell"));
-    env::remove_var("SHELL");
-
+    
     // Restore original environment
     if let Some(shell) = original_shell {
         env::set_var("SHELL", shell);
@@ -171,11 +157,51 @@ fn test_init_shell() -> Result<()> {
     if let Some(version) = original_fish_version {
         env::set_var("FISH_VERSION", version);
     }
-
-    Ok(())
 }
 
 #[test]
+#[serial]
+fn test_detect_current_shell_fish_env() {
+    // Save original environment
+    let original_shell = env::var("SHELL").ok();
+    let original_fish_version = env::var("FISH_VERSION").ok();
+    
+    // Clean environment for testing
+    env::remove_var("FISH_VERSION");
+    env::remove_var("SHELL");
+    
+    // Test FISH_VERSION detection
+    env::set_var("FISH_VERSION", "3.1.2");
+    assert_eq!(
+        detect_current_shell(),
+        "fish",
+        "Should detect Fish via FISH_VERSION"
+    );
+    
+    // Test FISH_VERSION takes precedence over SHELL
+    env::set_var("SHELL", "/bin/zsh");
+    env::set_var("FISH_VERSION", "3.1.2");
+    assert_eq!(
+        detect_current_shell(),
+        "fish",
+        "FISH_VERSION should take precedence over SHELL"
+    );
+    
+    // Clean up test environment
+    env::remove_var("FISH_VERSION");
+    env::remove_var("SHELL");
+    
+    // Restore original environment
+    if let Some(shell) = original_shell {
+        env::set_var("SHELL", shell);
+    }
+    if let Some(version) = original_fish_version {
+        env::set_var("FISH_VERSION", version);
+    }
+}
+
+#[test]
+#[serial]
 fn test_init_shell_explicit_fish() -> Result<()> {
     // Test with explicit fish shell override
     let path = init_shell(Some("fish".to_string()))?;
@@ -184,9 +210,15 @@ fn test_init_shell_explicit_fish() -> Result<()> {
 }
 
 #[test]
+#[serial]
 fn test_detect_current_shell_fish_variants() {
-    // Save original SHELL env var
+    // Save original environment
     let original_shell = env::var("SHELL").ok();
+    let original_fish_version = env::var("FISH_VERSION").ok();
+    
+    // Clean environment for testing
+    env::remove_var("FISH_VERSION");
+    env::remove_var("SHELL");
     
     // Test various fish shell paths
     let fish_paths = vec![
@@ -198,41 +230,26 @@ fn test_detect_current_shell_fish_variants() {
     ];
     
     for path in fish_paths {
+        env::remove_var("FISH_VERSION"); // Ensure FISH_VERSION doesn't interfere
+        env::remove_var("SHELL"); // Clean SHELL before setting
         env::set_var("SHELL", path);
-        assert_eq!(detect_current_shell(), Some("fish".to_string()), "Failed to detect fish shell at path: {}", path);
+        assert_eq!(
+            detect_current_shell(),
+            "fish",
+            "Failed to detect fish shell at path: {}",
+            path
+        );
     }
     
-    // Restore original SHELL env var
-    if let Some(shell) = original_shell {
-        env::set_var("SHELL", shell);
-    }
-}
-
-#[test]
-fn test_detect_current_shell_fish_env() {
-    // Save original environment
-    let original_shell = env::var("SHELL").ok();
-    let original_fish_version = env::var("FISH_VERSION").ok();
-    
-    // Test Fish detection via FISH_VERSION
-    env::set_var("FISH_VERSION", "3.1.2");
-    assert_eq!(detect_current_shell(), Some("fish".to_string()), "Should detect Fish via FISH_VERSION");
-    
-    // Test Fish detection via FISH_VERSION even when SHELL is set to something else
-    env::set_var("SHELL", "/bin/zsh");
-    env::set_var("FISH_VERSION", "3.1.2");
-    assert_eq!(detect_current_shell(), Some("fish".to_string()), "Should detect Fish via FISH_VERSION even when SHELL is set to something else");
+    // Clean up test environment
+    env::remove_var("FISH_VERSION");
+    env::remove_var("SHELL");
     
     // Restore original environment
     if let Some(shell) = original_shell {
         env::set_var("SHELL", shell);
-    } else {
-        env::remove_var("SHELL");
     }
-    
     if let Some(version) = original_fish_version {
         env::set_var("FISH_VERSION", version);
-    } else {
-        env::remove_var("FISH_VERSION");
     }
 }

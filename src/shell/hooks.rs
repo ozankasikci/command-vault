@@ -31,29 +31,32 @@ pub fn get_fish_integration_path() -> PathBuf {
 }
 
 /// Detect the current shell from environment variables
-pub fn detect_current_shell() -> Option<String> {
-    // First check for Fish-specific environment variable
+pub fn detect_current_shell() -> String {
+    // First check for FISH_VERSION environment variable (highest priority)
     if env::var("FISH_VERSION").is_ok() {
-        return Some("fish".to_string());
+        return "fish".to_string();
     }
 
     // Then check SHELL environment variable
-    if let Ok(shell) = env::var("SHELL") {
-        let shell_lower = shell.to_lowercase();
+    if let Ok(shell_path) = env::var("SHELL") {
+        let shell_path = shell_path.to_lowercase();
         
-        // Check for each shell type in order
-        if shell_lower.contains("zsh") || shell_lower.ends_with("/zsh") {
-            Some("zsh".to_string())
-        } else if shell_lower.contains("bash") || shell_lower.ends_with("/bash") {
-            Some("bash".to_string())
-        } else if shell_lower.contains("fish") || shell_lower.ends_with("/fish") {
-            Some("fish".to_string())
-        } else {
-            None
+        // Check for fish first (to match FISH_VERSION priority)
+        if shell_path.contains("fish") {
+            return "fish".to_string();
         }
-    } else {
-        None
+        
+        // Then check for other shells
+        if shell_path.contains("zsh") {
+            return "zsh".to_string();
+        }
+        if shell_path.contains("bash") {
+            return "bash".to_string();
+        }
     }
+
+    // Default to bash if no shell is detected or unknown shell
+    "bash".to_string()
 }
 
 /// Get the shell integration script path for a specific shell
@@ -72,7 +75,7 @@ pub fn init_shell(shell_override: Option<String>) -> Result<PathBuf> {
     let shell = if let Some(shell) = shell_override {
         shell
     } else {
-        detect_current_shell().ok_or_else(|| anyhow!("Could not detect shell"))?
+        detect_current_shell()
     };
 
     get_shell_integration_script(&shell)
