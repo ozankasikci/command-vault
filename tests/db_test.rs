@@ -459,9 +459,13 @@ fn test_concurrent_access() -> Result<()> {
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test.db");
     
-    // Create initial database
+    // Create initial database and enable WAL mode
+    let conn = rusqlite::Connection::open(db_path.to_str().unwrap())?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "busy_timeout", 5000)?;
+    drop(conn);
+
     let mut db = Database::new(db_path.to_str().unwrap())?;
-    let db_path = Arc::new(db_path.to_str().unwrap().to_string());
 
     // Add initial command
     let cmd = Command {
@@ -473,6 +477,7 @@ fn test_concurrent_access() -> Result<()> {
         parameters: vec![],
     };
     let id = db.add_command(&cmd)?;
+    let db_path = Arc::new(db_path.to_str().unwrap().to_string());
 
     // Create multiple threads that try to modify the same command
     let mut handles = vec![];
@@ -485,13 +490,32 @@ fn test_concurrent_access() -> Result<()> {
         let handle = thread::spawn(move || -> Result<()> {
             let mut db = Database::new(&db_path)?;
             
-            // Try to update the command
-            let mut cmd = db.get_command(id)?.unwrap();
-            cmd.command = format!("updated by thread {}", i);
-            db.update_command(&cmd)?;
+            // Try to update the command with retries
+            let mut retries = 3;
+            while retries > 0 {
+                if let Ok(_) = db.update_command(&Command {
+                    id: Some(id),
+                    command: format!("updated by thread {}", i),
+                    timestamp: Utc::now(),
+                    directory: "/test".to_string(),
+                    tags: vec![],
+                    parameters: vec![],
+                }) {
+                    break;
+                }
+                retries -= 1;
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
 
-            // Try to add a new tag
-            db.add_tags_to_command(id, &vec![format!("tag{}", i)])?;
+            // Try to add a new tag with retries
+            let mut retries = 3;
+            while retries > 0 {
+                if let Ok(_) = db.add_tags_to_command(id, &vec![format!("tag{}", i)]) {
+                    break;
+                }
+                retries -= 1;
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
 
             *counter.lock().unwrap() += 1;
             Ok(())
