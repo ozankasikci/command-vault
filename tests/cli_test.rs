@@ -63,6 +63,14 @@ fn test_add_command_parsing() -> Result<()> {
         _ => panic!("Expected Add command"),
     }
 
+    // Test add command without any command (missing --)
+    let result = Cli::try_parse_from([
+        "command-vault",
+        "add",
+    ]);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("the following required arguments were not provided"));
+
     Ok(())
 }
 

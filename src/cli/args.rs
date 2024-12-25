@@ -26,7 +26,7 @@ pub enum Commands {
         tags: Vec<String>,
         
         /// Command to add
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, required = true)]
         command: Vec<String>,
     },
     
