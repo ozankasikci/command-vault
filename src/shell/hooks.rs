@@ -23,18 +23,34 @@ pub fn get_bash_integration_path() -> PathBuf {
     path
 }
 
+/// Get the path to the Fish integration script
+pub fn get_fish_integration_path() -> PathBuf {
+    let mut path = get_shell_integration_dir();
+    path.push("fish-integration.fish");
+    path
+}
+
 /// Detect the current shell from environment variables
 pub fn detect_current_shell() -> Option<String> {
+    // First check for Fish-specific environment variable
+    if env::var("FISH_VERSION").is_ok() {
+        return Some("fish".to_string());
+    }
+
     if let Ok(shell) = env::var("SHELL") {
         let shell_lower = shell.to_lowercase();
+        
         if shell_lower.contains("zsh") || shell_lower.ends_with("/zsh") {
             Some("zsh".to_string())
         } else if shell_lower.contains("bash") || shell_lower.ends_with("/bash") {
             Some("bash".to_string())
+        } else if shell_lower.contains("fish") || shell_lower.ends_with("/fish") {
+            Some("fish".to_string())
         } else {
             None
         }
     } else {
+        eprintln!("DEBUG: No SHELL environment variable found");
         None
     }
 }
@@ -44,7 +60,8 @@ pub fn get_shell_integration_script(shell: &str) -> Result<PathBuf> {
     match shell.to_lowercase().as_str() {
         "zsh" => Ok(get_zsh_integration_path()),
         "bash" => Ok(get_bash_integration_path()),
-        _ => Err(anyhow!("Unsupported shell: {}. Supported shells are: zsh, bash", shell)),
+        "fish" => Ok(get_fish_integration_path()),
+        _ => Err(anyhow!("Unsupported shell: {}. Supported shells are: zsh, bash, fish", shell)),
     }
 }
 
