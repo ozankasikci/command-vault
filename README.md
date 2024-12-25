@@ -94,7 +94,8 @@ You can download the latest release for your platform from the [releases page](h
 #### Linux
 ```bash
 # Download the latest release (replace X.Y.Z with the version number)
-curl -LO https://github.com/yourusername/command-vault/releases/download/v0.3.0/command-vault-linux-amd64
+curl -LO https://github.com/ozankasikci/command-vault/releases/download/v0.3.0/command-vault-macos-arm64.tar.gz
+tar xzf command-vault-macos-arm64.tar.gz
 # Make it executable
 chmod +x command-vault-linux-amd64
 # Move it to your PATH
@@ -107,7 +108,8 @@ source "$(command-vault shell-init)"
 #### macOS
 ```bash
 # Download the latest release (replace X.Y.Z with the version number)
-curl -LO https://github.com/yourusername/command-vault/releases/download/v0.3.0/command-vault-macos-arm64
+curl -LO https://github.com/ozankasikci/command-vault/releases/download/v0.3.0/command-vault-macos-arm64.tar.gz
+tar xzf command-vault-macos-arm64.tar.gz
 # Make it executable
 chmod +x command-vault-macos-arm64
 # Move it to your PATH
