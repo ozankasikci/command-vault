@@ -58,181 +58,130 @@ impl<'a> App<'a> {
             terminal.draw(|f| self.ui(f))?;
 
             if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        if !self.filter_text.is_empty() {
-                            self.filter_text.clear();
-                            self.update_filtered_commands();
-                        } else if self.confirm_delete.is_some() {
-                            self.confirm_delete = None;
-                        } else if self.show_help {
-                            self.show_help = false;
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return Ok(());
-                    }
-                    KeyCode::Char('?') => {
-                        self.show_help = !self.show_help;
-                        continue; // Skip further processing when toggling help
-                    }
-                    _ if self.show_help => {
-                        // If help is shown, ignore all other keys except those above
-                        continue;
-                    }
-                    KeyCode::Char('c') => {
-                        if let Some(cmd) = self.get_selected_command() {
-                            copy_to_clipboard(&cmd.command)?;
-                            self.set_success_message("Command copied to clipboard!".to_string());
-                        }
-                    }
-                    KeyCode::Char('y') => {
-                        if let Some(cmd) = self.get_selected_command() {
-                            copy_to_clipboard(&cmd.command)?;
-                            self.set_success_message("Command copied to clipboard!".to_string());
-                        }
-                    }
-                    KeyCode::Enter => {
-                        if let Some(selected) = self.get_selection() {
-                            if let Some(confirm_idx) = self.confirm_delete {
-                                if confirm_idx == selected {
-                                    if let Some(idx) = self.get_selected_index() {
-                                        if let Some(command_id) = self.commands[idx].id {
-                                            match self.db.delete_command(command_id) {
-                                                Ok(_) => {
-                                                    self.commands.remove(idx);
-                                                    self.set_success_message("Command deleted successfully".to_string());
-                                                    self.update_filtered_commands();
-                                                    self.update_selection_after_delete(idx);
-                                                }
-                                                Err(e) => {
-                                                    self.set_error_message(format!("Failed to delete command: {}", e));
-                                                }
-                                            }
-                                            self.confirm_delete = None;
-                                        }
-                                    }
-                                }
-                            } else if let Some(cmd) = self.get_selected_command() {
-                                // Exit TUI temporarily
-                                restore_terminal(terminal)?;
-                                
-                                // Re-enable colors after restoring terminal
-                                colored::control::set_override(true);
-
-                                // If command has parameters, substitute them with user input
-                                let current_params = parse_parameters(&cmd.command);
-                                let final_command = substitute_parameters(&cmd.command, &current_params, None)?;
-                                let ctx = ExecutionContext {
-                                    command: final_command,
-                                    directory: cmd.directory.clone(),
-                                    test_mode: false,
-                                    debug_mode: self.debug_mode,
-                                };
-                                execute_shell_command(&ctx)?;
-                                
-                                return Ok(());
-                            }
-                        }
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        self.select_next();
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        self.select_previous();
-                    }
-                    KeyCode::Char('/') => {
-                        self.clear_filter();
-                        self.set_message("Type to filter commands...".to_string(), Color::Blue);
-                    }
-                    KeyCode::Char('e') => {
-                        if let Some(selected) = self.get_selection() {
-                            if let Some(&idx) = self.filtered_commands.get(selected) {
-                                if let Some(cmd) = self.commands.get(idx).cloned() {
-                                    // Exit TUI temporarily
-                                    restore_terminal(terminal)?;
-                                    
-                                    // Create AddCommandApp with existing command data
-                                    let mut add_app = AddCommandApp::new();
-                                    add_app.set_command(cmd.command.clone());
-                                    add_app.set_tags(cmd.tags.clone());
-                                    
-                                    let result = add_app.run();
-                                    
-                                    // Re-initialize terminal and force redraw
-                                    let mut new_terminal = setup_terminal()?;
-                                    new_terminal.clear()?;
-                                    *terminal = new_terminal;
-                                    terminal.draw(|f| self.ui(f))?;
-                                    
-                                    match result {
-                                        Ok(Some((new_command, new_tags, _))) => {
-                                            // Update command
-                                            let updated_cmd = Command {
-                                                id: cmd.id,
-                                                command: new_command.clone(),
-                                                timestamp: cmd.timestamp,
-                                                directory: cmd.directory.clone(),
-                                                tags: new_tags,
-                                                parameters: crate::utils::params::parse_parameters(&new_command),
-                                            };
-                                            
-                                            if let Err(e) = self.db.update_command(&updated_cmd) {
-                                                self.set_error_message(format!("Failed to update command: {}", e));
-                                            } else {
-                                                // Update local command list
-                                                if let Some(cmd) = self.commands.get_mut(idx) {
-                                                    *cmd = updated_cmd;
-                                                }
-                                                self.set_success_message("Command updated successfully!".to_string());
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            self.set_message("Edit cancelled".to_string(), Color::Yellow);
-                                        }
-                                        Err(e) => {
-                                            self.set_error_message(format!("Error during edit: {}", e));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        continue;
-                    }
-                    KeyCode::Char('d') => {
-                        if let Some(selected) = self.get_selection() {
-                            if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
-                                if let Some(command_id) = self.commands[filtered_idx].id {
-                                    self.confirm_delete = Some(selected);
-                                }
-                            }
-                        }
-                    }
-                    KeyCode::Char(c) => {
-                        if c == '/' {  // Skip if it's the '/' character that started filter mode
-                            self.clear_filter();
-                            self.set_message("Type to filter commands...".to_string(), Color::Blue);
-                        } else if c != '/' {  // Skip if it's the '/' character that started filter mode
-                            self.append_to_filter(c);
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        self.backspace_filter();
-                    }
-                    KeyCode::Esc => {
-                        if !self.filter_text.is_empty() {
-                            self.clear_filter();
-                        } else if self.confirm_delete.is_some() {
-                            self.confirm_delete = None;
-                            self.set_message("Delete operation cancelled".to_string(), Color::Yellow);
-                        }
-                    }
-                    _ => {}
+                if let Some(()) = self.handle_key_event(terminal, key)? {
+                    return Ok(());
                 }
             }
         }
+    }
+
+    fn handle_key_event(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>, key: event::KeyEvent) -> Result<Option<()>> {
+        match key.code {
+            KeyCode::Char('q') => self.handle_quit(),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Ok(Some(())),
+            KeyCode::Char('?') => self.handle_help_toggle(),
+            _ if self.show_help => Ok(None),
+            KeyCode::Char('c') | KeyCode::Char('y') => self.handle_copy(),
+            KeyCode::Enter => self.handle_enter(terminal),
+            KeyCode::Char('e') => self.handle_edit(terminal),
+            KeyCode::Down | KeyCode::Char('j') => self.handle_down(),
+            KeyCode::Up | KeyCode::Char('k') => self.handle_up(),
+            KeyCode::Char('/') => self.handle_filter_start(),
+            KeyCode::Char('d') => self.handle_delete(),
+            KeyCode::Char(c) => self.handle_char_input(c),
+            KeyCode::Backspace => self.handle_backspace(),
+            KeyCode::Esc => self.handle_escape(),
+            _ => Ok(None)
+        }
+    }
+
+    pub fn handle_quit(&mut self) -> Result<Option<()>> {
+        if !self.filter_text.is_empty() {
+            self.filter_text.clear();
+            self.update_filtered_commands();
+            Ok(None)
+        } else if self.confirm_delete.is_some() {
+            self.confirm_delete = None;
+            Ok(None)
+        } else if self.show_help {
+            self.show_help = false;
+            Ok(None)
+        } else {
+            Ok(Some(()))
+        }
+    }
+
+    fn handle_help_toggle(&mut self) -> Result<Option<()>> {
+        self.show_help = !self.show_help;
+        Ok(None)
+    }
+
+    fn handle_copy(&mut self) -> Result<Option<()>> {
+        if let Some(cmd) = self.get_selected_command() {
+            copy_to_clipboard(&cmd.command)?;
+            self.set_success_message("Command copied to clipboard!".to_string());
+        }
+        Ok(None)
+    }
+
+    fn handle_enter(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<Option<()>> {
+        if let Some(selected) = self.get_selection() {
+            if self.confirm_delete.is_some() {
+                self.delete_selected_command()?;
+                Ok(None)
+            } else {
+                self.execute_selected_command(terminal).map(Some)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn handle_edit(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<Option<()>> {
+        self.edit_selected_command(terminal)?;
+        Ok(None)
+    }
+
+    fn handle_down(&mut self) -> Result<Option<()>> {
+        self.select_next();
+        Ok(None)
+    }
+
+    fn handle_up(&mut self) -> Result<Option<()>> {
+        self.select_previous();
+        Ok(None)
+    }
+
+    fn handle_filter_start(&mut self) -> Result<Option<()>> {
+        self.clear_filter();
+        self.set_message("Type to filter commands...".to_string(), Color::Blue);
+        Ok(None)
+    }
+
+    fn handle_delete(&mut self) -> Result<Option<()>> {
+        if let Some(selected) = self.get_selection() {
+            if let Some(&filtered_idx) = self.filtered_commands.get(selected) {
+                if let Some(_) = self.commands[filtered_idx].id {
+                    self.confirm_delete = Some(selected);
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn handle_char_input(&mut self, c: char) -> Result<Option<()>> {
+        if c == '/' {
+            self.clear_filter();
+            self.set_message("Type to filter commands...".to_string(), Color::Blue);
+        } else if c != '/' {
+            self.append_to_filter(c);
+        }
+        Ok(None)
+    }
+
+    fn handle_backspace(&mut self) -> Result<Option<()>> {
+        self.backspace_filter();
+        Ok(None)
+    }
+
+    pub fn handle_escape(&mut self) -> Result<Option<()>> {
+        if !self.filter_text.is_empty() {
+            self.clear_filter();
+        } else if self.confirm_delete.is_some() {
+            self.confirm_delete = None;
+            self.set_message("Delete operation cancelled".to_string(), Color::Yellow);
+        }
+        Ok(None)
     }
 
     pub fn clear_filter(&mut self) {
@@ -274,60 +223,75 @@ impl<'a> App<'a> {
 
     fn ui(&mut self, f: &mut ratatui::Frame) {
         if self.show_help {
-            let help_text = vec![
-                "Command Vault Help",
-                "",
-                "Navigation:",
-                "  ↑/k      - Move cursor up",
-                "  ↓/j      - Move cursor down",
-                "  q        - Quit (or clear filter/cancel delete/close help)",
-                "  Ctrl+c   - Force quit",
-                "",
-                "Command Actions:",
-                "  Enter    - Execute selected command",
-                "  c/y      - Copy command to clipboard",
-                "  e        - Edit selected command (text, tags, directory)",
-                "  d        - Delete selected command (requires confirmation)",
-                "",
-                "Search and Filter:",
-                "  /        - Start filtering commands",
-                "  [type]   - Filter by command text, tags, or directory",
-                "  Esc      - Clear filter or cancel current operation",
-                "  Backspace- Remove last character from filter",
-                "",
-                "Display:",
-                "  ?        - Toggle this help screen",
-                "",
-                "Command Format:",
-                "  - (@param) Parameters are shown with @ prefix",
-                "  - (#tag)  Tags are shown in green with # prefix",
-                "  - (dir)   Working directory is shown if set",
-                "  - (id)    Command IDs are shown in parentheses",
-                "",
-                "Tips:",
-                "  - Use descriptive tags to organize commands",
-                "  - Parameters (@param) allow dynamic input",
-                "  - Filter works on commands, tags, and directories",
-                "  - Working directory affects command execution",
-                "",
-                "Note:",
-                "  - Debug mode can be enabled for troubleshooting",
-                "  - All commands are executed in the current shell",
-                "  - Command history is preserved in the database"
-            ];
-
-            let help_paragraph = Paragraph::new(help_text.join("\n"))
-                .style(Style::default().fg(Color::White))
-                .block(Block::default().borders(Borders::ALL).title("Help (press ? to close)"));
-
-            // Center the help window
-            let area = centered_rect(80, 80, f.size());
-            f.render_widget(Clear, area); // Clear the background
-            f.render_widget(help_paragraph, area);
+            self.render_help_screen(f);
             return;
         }
 
-        let chunks = Layout::default()
+        let chunks = self.create_layout(f);
+        self.render_title(f, chunks[0]);
+        self.render_commands_list(f, chunks[1]);
+        self.render_filter(f, chunks[2]);
+        self.render_status_bar(f, chunks[3]);
+
+        if self.confirm_delete.is_some() {
+            self.render_delete_confirmation(f);
+        }
+    }
+
+    fn render_help_screen(&self, f: &mut ratatui::Frame) {
+        let help_text = vec![
+            "Command Vault Help",
+            "",
+            "Navigation:",
+            "  ↑/k      - Move cursor up",
+            "  ↓/j      - Move cursor down",
+            "  q        - Quit (or clear filter/cancel delete/close help)",
+            "  Ctrl+c   - Force quit",
+            "",
+            "Command Actions:",
+            "  Enter    - Execute selected command",
+            "  c/y      - Copy command to clipboard",
+            "  e        - Edit selected command (text, tags, directory)",
+            "  d        - Delete selected command (requires confirmation)",
+            "",
+            "Search and Filter:",
+            "  /        - Start filtering commands",
+            "  [type]   - Filter by command text, tags, or directory",
+            "  Esc      - Clear filter or cancel current operation",
+            "  Backspace- Remove last character from filter",
+            "",
+            "Display:",
+            "  ?        - Toggle this help screen",
+            "",
+            "Command Format:",
+            "  - (@param) Parameters are shown with @ prefix",
+            "  - (#tag)  Tags are shown in green with # prefix",
+            "  - (dir)   Working directory is shown if set",
+            "  - (id)    Command IDs are shown in parentheses",
+            "",
+            "Tips:",
+            "  - Use descriptive tags to organize commands",
+            "  - Parameters (@param) allow dynamic input",
+            "  - Filter works on commands, tags, and directories",
+            "  - Working directory affects command execution",
+            "",
+            "Note:",
+            "  - Debug mode can be enabled for troubleshooting",
+            "  - All commands are executed in the current shell",
+            "  - Command history is preserved in the database"
+        ];
+
+        let help_paragraph = Paragraph::new(help_text.join("\n"))
+            .style(Style::default().fg(Color::White))
+            .block(Block::default().borders(Borders::ALL).title("Help (press ? to close)"));
+
+        let area = centered_rect(80, 80, f.size());
+        f.render_widget(Clear, area);
+        f.render_widget(help_paragraph, area);
+    }
+
+    fn create_layout(&self, f: &mut ratatui::Frame) -> Vec<Rect> {
+        Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
@@ -336,15 +300,18 @@ impl<'a> App<'a> {
                 Constraint::Length(1),  // Filter
                 Constraint::Length(3),  // Status bar
             ])
-            .split(f.size());
+            .split(f.size())
+            .to_vec()
+    }
 
-        // Title
+    fn render_title(&self, f: &mut ratatui::Frame, area: Rect) {
         let title = Paragraph::new("Command Vault")
             .style(Style::default().fg(Color::Cyan))
             .block(Block::default().borders(Borders::ALL));
-        f.render_widget(title, chunks[0]);
+        f.render_widget(title, area);
+    }
 
-        // Commands list
+    fn render_commands_list(&mut self, f: &mut ratatui::Frame, area: Rect) {
         let commands: Vec<ListItem> = self.filtered_commands.iter()
             .map(|&i| {
                 let cmd = &self.commands[i];
@@ -388,19 +355,21 @@ impl<'a> App<'a> {
         });
 
         if let Some(state) = commands_state {
-            f.render_stateful_widget(commands, chunks[1], &mut state.clone());
+            f.render_stateful_widget(commands, area, &mut state.clone());
         } else {
-            f.render_widget(commands, chunks[1]);
+            f.render_widget(commands, area);
         }
+    }
 
-        // Filter
+    fn render_filter(&self, f: &mut ratatui::Frame, area: Rect) {
         if !self.filter_text.is_empty() {
             let filter = Paragraph::new(format!("Filter: {}", self.filter_text))
                 .style(Style::default().fg(Color::Yellow));
-            f.render_widget(filter, chunks[2]);
+            f.render_widget(filter, area);
         }
+    }
 
-        // Status bar with help text or message
+    fn render_status_bar(&self, f: &mut ratatui::Frame, area: Rect) {
         let status = if let Some((msg, color)) = &self.message {
             vec![Span::styled(msg, Style::default().fg(*color))]
         } else if self.show_help {
@@ -427,9 +396,10 @@ impl<'a> App<'a> {
 
         let status = Paragraph::new(Line::from(status))
             .block(Block::default().borders(Borders::ALL));
-        f.render_widget(status, chunks[3]);
+        f.render_widget(status, area);
+    }
 
-        // Render delete confirmation dialog if needed
+    fn render_delete_confirmation(&self, f: &mut ratatui::Frame) {
         if let Some(idx) = self.confirm_delete {
             if let Some(&cmd_idx) = self.filtered_commands.get(idx) {
                 if let Some(cmd) = self.commands.get(cmd_idx) {
@@ -452,7 +422,6 @@ impl<'a> App<'a> {
                             .border_style(Style::default().fg(Color::Red))
                             .title("Confirm Delete"));
 
-                    // Center the dialog
                     let area = centered_rect(60, 40, f.size());
                     f.render_widget(Clear, area);
                     f.render_widget(dialog, area);
@@ -540,6 +509,111 @@ impl<'a> App<'a> {
             .and_then(|selected| self.filtered_commands.get(selected))
             .copied()
     }
+
+    fn execute_selected_command(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+        if let Some(cmd) = self.get_selected_command() {
+            // Exit TUI temporarily
+            restore_terminal(terminal)?;
+            
+            // Re-enable colors after restoring terminal
+            colored::control::set_override(true);
+
+            // If command has parameters, substitute them with user input
+            let current_params = parse_parameters(&cmd.command);
+            let final_command = substitute_parameters(&cmd.command, &current_params, None)?;
+            let ctx = ExecutionContext {
+                command: final_command,
+                directory: cmd.directory.clone(),
+                test_mode: false,
+                debug_mode: self.debug_mode,
+            };
+            execute_shell_command(&ctx)?;
+            
+            return Ok(());
+        }
+        Ok(())
+    }
+
+    fn delete_selected_command(&mut self) -> Result<()> {
+        if let Some(selected) = self.get_selection() {
+            if let Some(confirm_idx) = self.confirm_delete {
+                if confirm_idx == selected {
+                    if let Some(idx) = self.get_selected_index() {
+                        if let Some(command_id) = self.commands[idx].id {
+                            match self.db.delete_command(command_id) {
+                                Ok(_) => {
+                                    self.commands.remove(idx);
+                                    self.set_success_message("Command deleted successfully".to_string());
+                                    self.update_filtered_commands();
+                                    self.update_selection_after_delete(idx);
+                                }
+                                Err(e) => {
+                                    self.set_error_message(format!("Failed to delete command: {}", e));
+                                }
+                            }
+                            self.confirm_delete = None;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn edit_selected_command(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+        if let Some(selected) = self.get_selection() {
+            if let Some(&idx) = self.filtered_commands.get(selected) {
+                if let Some(cmd) = self.commands.get(idx).cloned() {
+                    // Exit TUI temporarily
+                    restore_terminal(terminal)?;
+                    
+                    // Create AddCommandApp with existing command data
+                    let mut add_app = AddCommandApp::new();
+                    add_app.set_command(cmd.command.clone());
+                    add_app.set_tags(cmd.tags.clone());
+                    
+                    let result = add_app.run();
+                    
+                    // Re-initialize terminal and force redraw
+                    let mut new_terminal = setup_terminal()?;
+                    new_terminal.clear()?;
+                    *terminal = new_terminal;
+                    terminal.draw(|f| self.ui(f))?;
+                    
+                    match result {
+                        Ok(Some((new_command, new_tags, _))) => {
+                            // Update command
+                            let updated_cmd = Command {
+                                id: cmd.id,
+                                command: new_command.clone(),
+                                timestamp: cmd.timestamp,
+                                directory: cmd.directory.clone(),
+                                tags: new_tags,
+                                parameters: crate::utils::params::parse_parameters(&new_command),
+                            };
+                            
+                            if let Err(e) = self.db.update_command(&updated_cmd) {
+                                self.set_error_message(format!("Failed to update command: {}", e));
+                            } else {
+                                // Update local command list
+                                if let Some(cmd) = self.commands.get_mut(idx) {
+                                    *cmd = updated_cmd;
+                                }
+                                self.set_success_message("Command updated successfully!".to_string());
+                            }
+                        }
+                        Ok(None) => {
+                            self.set_message("Edit cancelled".to_string(), Color::Yellow);
+                        }
+                        Err(e) => {
+                            self.set_error_message(format!("Error during edit: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -572,7 +646,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     Ok(())
 }
 
-fn copy_to_clipboard(text: &str) -> Result<()> {
+pub fn copy_to_clipboard(text: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
