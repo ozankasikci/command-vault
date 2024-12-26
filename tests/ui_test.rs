@@ -980,3 +980,203 @@ fn test_app_selection_update_methods() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_app_key_events() -> Result<()> {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test help toggle with '?'
+    assert_eq!(app.show_help, false);
+    app.show_help = !app.show_help; // Simulate '?' key press
+    assert_eq!(app.show_help, true);
+    app.show_help = !app.show_help; // Simulate '?' key press again
+    assert_eq!(app.show_help, false);
+
+    // Test filter operations
+    assert_eq!(app.filter_text, "");
+    app.append_to_filter('g'); // Simulate typing 'g'
+    app.append_to_filter('i'); // Simulate typing 'i'
+    app.append_to_filter('t'); // Simulate typing 't'
+    assert_eq!(app.filter_text, "git");
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test backspace in filter
+    app.backspace_filter(); // Simulate backspace
+    assert_eq!(app.filter_text, "gi");
+    
+    // Test clear filter with Esc
+    app.clear_filter(); // Simulate Esc
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+
+    // Test navigation
+    assert_eq!(app.selected, None);
+    app.select_next(); // Simulate down arrow or 'j'
+    assert_eq!(app.selected, Some(0));
+    app.select_next(); // Move down again
+    assert_eq!(app.selected, Some(1));
+    app.select_previous(); // Simulate up arrow or 'k'
+    assert_eq!(app.selected, Some(0));
+
+    // Test delete confirmation
+    app.confirm_delete = Some(0); // Simulate 'd' key
+    assert_eq!(app.confirm_delete, Some(0));
+    app.confirm_delete = None; // Simulate Esc
+    assert_eq!(app.confirm_delete, None);
+
+    // Test message handling
+    assert_eq!(app.message, None);
+    app.set_success_message("Test success".to_string());
+    assert_eq!(app.message, Some(("Test success".to_string(), Color::Green)));
+    app.clear_message();
+    assert_eq!(app.message, None);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_clipboard_operations() -> Result<()> {
+    use std::process::Command;
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Select a command
+    app.selected = Some(0);
+    assert_eq!(app.selected, Some(0));
+
+    // Get the command that will be copied
+    let command_to_copy = app.get_selected_command().unwrap().command.clone();
+    assert_eq!(command_to_copy, "ls -la");
+
+    // Copy command to clipboard
+    #[cfg(target_os = "macos")]
+    {
+        // Copy using pbcopy
+        let mut child = Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(command_to_copy.as_bytes())?;
+        }
+        
+        child.wait()?;
+
+        // Verify using pbpaste
+        let output = Command::new("pbpaste")
+            .output()?;
+        let clipboard_content = String::from_utf8(output.stdout)?;
+        assert_eq!(clipboard_content, command_to_copy);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Copy using xclip
+        let mut child = Command::new("xclip")
+            .arg("-selection")
+            .arg("clipboard")
+            .stdin(std::process::Stdio::piped())
+            .spawn()?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(command_to_copy.as_bytes())?;
+        }
+        
+        child.wait()?;
+
+        // Verify using xclip -o
+        let output = Command::new("xclip")
+            .arg("-selection")
+            .arg("clipboard")
+            .arg("-o")
+            .output()?;
+        let clipboard_content = String::from_utf8(output.stdout)?;
+        assert_eq!(clipboard_content, command_to_copy);
+    }
+
+    // Verify message is set after copy
+    assert_eq!(app.message, None);
+    app.set_success_message("Command copied to clipboard!".to_string());
+    assert_eq!(app.message, Some(("Command copied to clipboard!".to_string(), Color::Green)));
+
+    Ok(())
+}
+
+#[test]
+fn test_app_terminal_setup() -> Result<()> {
+    use crossterm::terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled};
+    use ratatui::Terminal;
+    use ratatui::backend::CrosstermBackend;
+    use std::io::stdout;
+
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test terminal setup
+    enable_raw_mode()?;
+    let stdout = stdout();
+    let backend = CrosstermBackend::new(stdout);
+    let terminal = Terminal::new(backend)?;
+    assert!(is_raw_mode_enabled()?);
+
+    // Test terminal restoration
+    disable_raw_mode()?;
+    assert!(!is_raw_mode_enabled()?);
+
+    Ok(())
+}
+
+#[test]
+fn test_app_ui_state() -> Result<()> {
+    let mut db = Database::new(":memory:")?;
+    db.init()?;
+    
+    let commands = create_test_commands();
+    let mut app = App::new(commands.clone(), &mut db, false);
+
+    // Test initial state
+    assert_eq!(app.show_help, false);
+    assert_eq!(app.message, None);
+    assert_eq!(app.filter_text, "");
+    assert_eq!(app.filtered_commands.len(), 3);
+    assert_eq!(app.selected, None);
+    assert_eq!(app.confirm_delete, None);
+
+    // Test help state
+    app.show_help = true;
+    assert_eq!(app.show_help, true);
+
+    // Test filter state
+    app.show_help = false;
+    app.filter_text = "git".to_string();
+    app.update_filtered_commands();
+    assert_eq!(app.filter_text, "git");
+    assert_eq!(app.filtered_commands.len(), 1);
+    assert_eq!(app.commands[app.filtered_commands[0]].command, "git status");
+
+    // Test message state
+    app.set_success_message("Test message".to_string());
+    assert_eq!(app.message, Some(("Test message".to_string(), Color::Green)));
+
+    // Test delete confirmation state
+    app.selected = Some(0);
+    app.confirm_delete = Some(0);
+    assert_eq!(app.selected, Some(0));
+    assert_eq!(app.confirm_delete, Some(0));
+
+    Ok(())
+}
