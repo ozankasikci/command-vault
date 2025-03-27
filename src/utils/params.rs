@@ -54,6 +54,16 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
                 .collect()
         };
 
+        // First, remove all parameter descriptions from the command
+        for param in parameters {
+            if let Some(desc) = &param.description {
+                // Match the exact pattern including the @ symbol
+                let pattern = format!("@{}:{}", param.name, desc);
+                final_command = final_command.replace(&pattern, &format!("@{}", param.name));
+            }
+        }
+
+        // Then replace parameters with values
         for (i, param) in parameters.iter().enumerate() {
             let value = if i < test_values.len() {
                 test_values[i]
@@ -80,11 +90,10 @@ pub fn substitute_parameters(command: &str, parameters: &[Parameter], test_input
             };
 
             final_command = final_command.replace(&format!("@{}", param.name), &quoted_value);
-            
-            // Remove the description part from the command
-            if let Some(desc) = &param.description {
-                final_command = final_command.replace(&format!(":{}", desc), "");
-            }
+        }
+        
+        if std::env::var("COMMAND_VAULT_DEBUG").is_ok() {
+            eprintln!("[DEBUG] Final result: {}", final_command);
         }
         Ok(final_command)
     } else {
@@ -96,8 +105,7 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
     let is_test = test_input.is_some() || std::env::var("COMMAND_VAULT_TEST").is_ok();
     let result = (|| -> Result<String> {
         let mut param_values: HashMap<String, String> = HashMap::new();
-        let mut final_command = String::new();
-
+        
         for param in parameters {
             let value = if is_test {
                 if let Some(input) = test_input {
@@ -243,8 +251,17 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
             param_values.insert(param.name.clone(), value);
         }
 
-        // Build final command
-        final_command = command.to_string();
+        // First, remove all parameter descriptions from the command
+        let mut final_command = command.to_string();
+        for param in parameters {
+            if let Some(desc) = &param.description {
+                // Match the exact pattern including the @ symbol
+                let pattern = format!("@{}:{}", param.name, desc);
+                final_command = final_command.replace(&pattern, &format!("@{}", param.name));
+            }
+        }
+
+        // Build final command with parameter values
         for (name, value) in &param_values {
             let needs_quotes = value.is_empty() || 
                              value.contains(' ') || 
@@ -265,11 +282,6 @@ pub fn prompt_parameters(command: &str, parameters: &[Parameter], test_input: Op
             };
 
             final_command = final_command.replace(&format!("@{}", name), &quoted_value);
-            
-            // Remove the description part from the command
-            if let Some(desc) = &parameters.iter().find(|p| p.name == *name).unwrap().description {
-                final_command = final_command.replace(&format!(":{}", desc), "");
-            }
         }
 
         if !is_test {
